@@ -3,12 +3,12 @@ package worker
 import (
 	"bytes"
 	"encoding/json"
-	"fbParser/pkg/fb/util"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
+	"github.com/gordy96/fb_parser/pkg/fb/util"
 )
 
 type Env struct {

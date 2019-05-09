@@ -2,14 +2,14 @@ package google
 
 import (
 	"bytes"
-	"fbParser/pkg/fb/util"
-	"fbParser/pkg/geo"
-	"io/ioutil"
+	"github.com/gordy96/fb_parser/pkg/geo"
+	"github.com/gordy96/fb_parser/pkg/fb/util"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"regexp"
 	"strconv"
+	"io/ioutil"
+	"net/http/httputil"
 )
 
 type CannotParseError struct {

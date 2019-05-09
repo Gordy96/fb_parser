@@ -1,25 +1,24 @@
 package worker
 
 import (
-	"bytes"
-	"encoding/base64"
-	"encoding/json"
-	"errors"
-	"fbParser/pkg/fb"
-	"fbParser/pkg/fb/util"
-	cutsomErrors "fbParser/pkg/fb/worker/errors"
-	"fmt"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"io/ioutil"
-	"net"
 	"net/http"
-	"net/http/cookiejar"
-	"net/http/httputil"
 	"net/url"
-	"regexp"
-	"strconv"
-	"strings"
+	"net/http/cookiejar"
+	"net"
 	"time"
+	"github.com/gordy96/fb_parser/pkg/fb/util"
+	"strings"
+	"github.com/gordy96/fb_parser/pkg/fb"
+	"strconv"
+	"fmt"
+	"bytes"
+	"encoding/json"
+	"encoding/base64"
+	"io/ioutil"
+	"net/http/httputil"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"regexp"
+	"github.com/gordy96/fb_parser/pkg/fb/worker/errors"
 )
 
 var (
@@ -126,7 +125,7 @@ func (a *FBAccount) Login() error {
 	}(resp.Cookies())
 
 	if uid == "" {
-		return cutsomErrors.AuthenticationFailedError{Request: req, Response: resp}
+		return errors.AuthenticationFailedError{Request: req, Response: resp}
 	}
 
 	a.Env.Increment()
@@ -247,7 +246,7 @@ func (a *FBAccount) GetUserInfo(user *fb.Account) (error) {
 		resp.Body = ioutil.NopCloser(bytes.NewBuffer(responseContent))
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
-		return cutsomErrors.ParsingError{
+		return errors.ParsingError{
 			Stage: fmt.Sprintf("GetUserInfo (parsing name for %s[%s])", user.Nickname, user.ID),
 			Request: rawReq,
 			Response: rawResp,
@@ -268,7 +267,7 @@ func (a *FBAccount) GetUserInfo(user *fb.Account) (error) {
 		resp.Body = ioutil.NopCloser(bytes.NewBuffer(responseContent))
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
-		return cutsomErrors.GenderUndefinedError{
+		return errors.GenderUndefinedError{
 			Stage: fmt.Sprintf("GetUserInfo (parsing gender for %s[%s])", user.Nickname, user.ID),
 			Request: rawReq,
 			Response: rawResp,
@@ -379,7 +378,7 @@ func (a *FBAccount) GetUserAlbums(user *fb.Account) ([]string, error) {
 		resp.Body = ioutil.NopCloser(bytes.NewBuffer(responseContent))
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
-		err = cutsomErrors.NoAlbumsError{
+		err = errors.NoAlbumsError{
 			Stage: fmt.Sprintf("GetUserAlbums (parsing albums for %s[%s])", user.Nickname, user.ID),
 			Request: rawReq,
 			Response: rawResp,
@@ -506,7 +505,7 @@ func (a *FBAccount) GetUserFriendsList(user *fb.Account, cursor string) ([]fb.Ac
 		resp.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
-		err = cutsomErrors.NoFriendsError{
+		err = errors.NoFriendsError{
 			Stage: fmt.Sprintf("GetUserFriendsList (parsing friends for %s[%s])", user.Nickname, user.ID),
 			Request: rawReq,
 			Response: rawResp,
@@ -591,7 +590,7 @@ func (a *FBAccount) GetIDFromNickname(nickname string) (string, error) {
 		resp.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
-		err = cutsomErrors.ParsingError{
+		err = errors.ParsingError{
 			Stage: fmt.Sprintf("GetIdFromNickname (%s)", nickname),
 			Request: rawReq,
 			Response: rawResp,
@@ -672,7 +671,7 @@ func (a *FBAccount) GetAlbumPhotosIDS(user fb.Account, album string, offset int)
 		resp.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
-		err = cutsomErrors.ParsingError{
+		err = errors.ParsingError{
 			Stage: fmt.Sprintf("GetAlbumPhotosIDS (parsing photo ids from %s (%s[%s]))", album, user.Nickname, user.ID),
 			Request: rawReq,
 			Response: rawResp,
@@ -722,7 +721,7 @@ func (a *FBAccount) GetPhotoFull(id string) (string, error) {
 		resp.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
-		err = cutsomErrors.ParsingError{
+		err = errors.ParsingError{
 			Stage: fmt.Sprintf("GetPhotoFull (parsing full link for %s)", id),
 			Request: rawReq,
 			Response: rawResp,
@@ -739,7 +738,14 @@ func (a *FBAccount) GetPhotoFull(id string) (string, error) {
 	if l != "" {
 		return l, nil
 	}
-	return "", errors.New("could not find link")
+	return "", CouldNotParseLinkError{}
+}
+
+type CouldNotParseLinkError struct {
+}
+
+func (c CouldNotParseLinkError) Error() string {
+	return "could not find link"
 }
 
 func parseAccountsLinks(source []byte) []string {
