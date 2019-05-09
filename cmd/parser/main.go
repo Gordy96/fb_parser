@@ -644,6 +644,8 @@ func main() {
 	crawlDepth := flag.Int("depth", 1, "depth of friends crawl")
 	maxPhotos := flag.Int("photos", 300, "maximum photos to download per one user")
 
+	flag.StringVar(&google.ProxyString, "geo_proxy", "", "proxy for google maps place resolver")
+
 	flag.Parse()
 
 	args := flag.Args()

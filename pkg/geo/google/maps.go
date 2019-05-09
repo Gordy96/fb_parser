@@ -25,6 +25,8 @@ func (c CannotParseError) Error() string {
 type MapsHttp struct {
 }
 
+var ProxyString string = ""
+
 func (m MapsHttp) FindByName(name string) (geo.Point, error) {
 	req, _ := http.NewRequest("GET", "https://www.google.com/maps/search/", nil)
 	q := url.Values{}
@@ -32,11 +34,14 @@ func (m MapsHttp) FindByName(name string) (geo.Point, error) {
 	q.Set("hl", "en")
 	q.Set("query", name)
 	req.URL.RawQuery = q.Encode()
-	proxyUrl, _ := url.Parse("http://127.0.0.1:8888")
-	cl := http.Client{
-		Transport:&http.Transport{
-			Proxy: http.ProxyURL(proxyUrl),
-		},
+	var cl http.Client
+	if ProxyString != "" {
+		proxyUrl, _ := url.Parse(ProxyString)
+		cl = http.Client{
+			Transport:&http.Transport{
+				Proxy: http.ProxyURL(proxyUrl),
+			},
+		}
 	}
 	resp, err := cl.Do(req)
 
