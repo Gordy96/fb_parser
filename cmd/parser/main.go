@@ -266,7 +266,7 @@ type Photo struct {
 	ID       string `json:"id" bson:"id"`
 	UserID   string `json:"user_id" bson:"user_id"`
 	AlbumID  string `json:"album_id" bson:"album_id"`
-	FullLink string `json:"path,omitempty" bson:"path,omitempty"`
+	FullLink string `json:"full_link,omitempty" bson:"full_link,omitempty"`
 }
 
 type PhotoService struct {
@@ -294,7 +294,7 @@ func (p *PhotoService) FindNextToDownload() (*Photo, error) {
 	p.mux.Lock()
 	defer p.mux.Unlock()
 	return p.find(bson.M{
-		"path": bson.M{
+		"full_link": bson.M{
 			"$exists": false,
 		},
 	})
