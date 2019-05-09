@@ -732,6 +732,7 @@ func main() {
 					wrk := worker.NewFBAccount(email, password, proxy)
 					err = wrk.Login()
 					if err != nil {
+						logError(err)
 						panic(err)
 					}
 					ws.Save(wrk)
