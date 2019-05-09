@@ -1,28 +1,28 @@
 package main
 
 import (
-	"go.mongodb.org/mongo-driver/mongo"
-	"sync"
-	"github.com/gordy96/fb_parser/pkg/fb"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"github.com/gordy96/fb_parser/pkg/fb/worker"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"github.com/gordy96/fb_parser/pkg/geo"
-	"os"
-	"fmt"
-	"net/http"
-	"github.com/gordy96/fb_parser/pkg/fb/util"
-	"log"
-	"github.com/gordy96/fb_parser/pkg/geo/google"
-	"github.com/gordy96/fb_parser/pkg/queue"
-	"flag"
-	"go.mongodb.org/mongo-driver/x/network/connstring"
-	"regexp"
-	"time"
 	"encoding/json"
 	"errors"
+	"flag"
+	"fmt"
+	"github.com/gordy96/fb_parser/pkg/fb"
+	"github.com/gordy96/fb_parser/pkg/fb/util"
+	"github.com/gordy96/fb_parser/pkg/fb/worker"
 	errors2 "github.com/gordy96/fb_parser/pkg/fb/worker/errors"
+	"github.com/gordy96/fb_parser/pkg/geo"
+	"github.com/gordy96/fb_parser/pkg/geo/google"
+	"github.com/gordy96/fb_parser/pkg/queue"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/x/network/connstring"
+	"log"
+	"net/http"
+	"os"
+	"regexp"
+	"sync"
+	"time"
 	"unicode"
 )
 
@@ -31,7 +31,7 @@ type Suspender interface {
 }
 
 type CooldownSuspender struct {
-	dur			time.Duration
+	dur time.Duration
 }
 
 func (c CooldownSuspender) Suspend() {
@@ -44,12 +44,12 @@ var defaultSuspender = CooldownSuspender{
 
 type AccountService struct {
 	col *mongo.Collection
-	mux		sync.Mutex
+	mux sync.Mutex
 }
 
 func (a *AccountService) Find(id string) *fb.Account {
 	r := a.col.FindOne(nil, bson.M{
-		"id":id,
+		"id": id,
 	})
 	b := &fb.Account{}
 
@@ -64,18 +64,18 @@ func (a *AccountService) Find(id string) *fb.Account {
 func (a *AccountService) Save(account *fb.Account) (bool, error) {
 	o := &options.UpdateOptions{}
 	o.SetUpsert(true)
-	r, err := a.col.UpdateOne(nil, bson.M{"id":account.ID}, bson.M{"$set":account}, o)
+	r, err := a.col.UpdateOne(nil, bson.M{"id": account.ID}, bson.M{"$set": account}, o)
 	return (r.ModifiedCount + r.UpsertedCount) >= 1, err
 }
 
 func (a *AccountService) Delete(account *fb.Account) (bool, error) {
-	r, err := a.col.DeleteOne(nil, bson.M{"id":account.ID})
+	r, err := a.col.DeleteOne(nil, bson.M{"id": account.ID})
 	return (r.DeletedCount) >= 1, err
 }
 
 type WorkerAccountService struct {
 	col *mongo.Collection
-	mux		sync.Mutex
+	mux sync.Mutex
 }
 
 func (w *WorkerAccountService) find(criteria bson.M) (*worker.FBAccount, error) {
@@ -132,19 +132,19 @@ func (w *WorkerAccountService) Save(account *worker.FBAccount) (bool, error) {
 	o := options.Update()
 	o.SetUpsert(true)
 	w.mux.Lock()
-	r, err := w.col.UpdateOne(nil, bson.M{"email":account.Email}, bson.M{"$set":account}, o)
+	r, err := w.col.UpdateOne(nil, bson.M{"email": account.Email}, bson.M{"$set": account}, o)
 	w.mux.Unlock()
 	return (r.ModifiedCount + r.UpsertedCount) >= 1, err
 }
 
 type PlaceService struct {
-	col *mongo.Collection
-	smux		sync.Mutex
-	fmux		sync.Mutex
+	col  *mongo.Collection
+	smux sync.Mutex
+	fmux sync.Mutex
 }
 
 func (p *PlaceService) FindByName(name string) (*fb.Place, error) {
-	r := p.col.FindOne(nil, bson.M{"name":name})
+	r := p.col.FindOne(nil, bson.M{"name": name})
 
 	if r.Err() != nil {
 		return nil, r.Err()
@@ -164,7 +164,7 @@ func (p *PlaceService) FindByName(name string) (*fb.Place, error) {
 	return place, nil
 }
 
-func (p *PlaceService) FindByNameOrCreate(name string, cbl... func(*fb.Place)) (*fb.Place, error) {
+func (p *PlaceService) FindByNameOrCreate(name string, cbl ...func(*fb.Place)) (*fb.Place, error) {
 	p.fmux.Lock()
 	defer p.fmux.Unlock()
 	pl, err := p.FindByName(name)
@@ -191,7 +191,7 @@ func (p *PlaceService) FindByNameOrCreate(name string, cbl... func(*fb.Place)) (
 }
 
 func (p *PlaceService) FindByID(id primitive.ObjectID) (*fb.Place, error) {
-	r := p.col.FindOne(nil, bson.M{"_id":id})
+	r := p.col.FindOne(nil, bson.M{"_id": id})
 
 	if r.Err() != nil {
 		return nil, r.Err()
@@ -219,7 +219,7 @@ func (p *PlaceService) Save(place *fb.Place) (bool, error) {
 		place.ID = primitive.NewObjectID()
 	}
 	var r *mongo.UpdateResult
-	r, err = p.col.UpdateOne(nil, bson.M{"_id":place.ID}, bson.M{"$set":place}, o)
+	r, err = p.col.UpdateOne(nil, bson.M{"_id": place.ID}, bson.M{"$set": place}, o)
 	p.smux.Unlock()
 	insCount = int(r.ModifiedCount + r.UpsertedCount)
 
@@ -231,7 +231,7 @@ func (p *PlaceService) Save(place *fb.Place) (bool, error) {
 }
 
 type CountryService struct {
-	col		*mongo.Collection
+	col *mongo.Collection
 }
 
 func (c CountryService) GetCountryNameFromPoint(p geo.Point) (string, error) {
@@ -240,10 +240,10 @@ func (c CountryService) GetCountryNameFromPoint(p geo.Point) (string, error) {
 	r := c.col.FindOne(nil, bson.M{
 		"geometry": bson.M{
 			"$geoIntersects": bson.M{
-					"$geometry": bson.M{
-						"type": "Point",
-						"coordinates": []float64{ p.X, p.Y },
-					},
+				"$geometry": bson.M{
+					"type":        "Point",
+					"coordinates": []float64{p.X, p.Y},
+				},
 			},
 		},
 	})
@@ -263,10 +263,10 @@ func (c CountryService) GetCountryNameFromPoint(p geo.Point) (string, error) {
 }
 
 type Photo struct {
-	ID			string		`json:"id" bson:"id"`
-	UserID		string		`json:"user_id" bson:"user_id"`
-	AlbumID		string		`json:"album_id" bson:"album_id"`
-	FullLink	string		`json:"path,omitempty" bson:"path,omitempty"`
+	ID       string `json:"id" bson:"id"`
+	UserID   string `json:"user_id" bson:"user_id"`
+	AlbumID  string `json:"album_id" bson:"album_id"`
+	FullLink string `json:"path,omitempty" bson:"path,omitempty"`
 }
 
 type PhotoService struct {
@@ -287,7 +287,7 @@ func (p *PhotoService) find(criteria interface{}) (*Photo, error) {
 func (p *PhotoService) FindByID(id string) (*Photo, error) {
 	p.mux.Lock()
 	defer p.mux.Unlock()
-	return p.find(bson.M{"id":id})
+	return p.find(bson.M{"id": id})
 }
 
 func (p *PhotoService) FindNextToDownload() (*Photo, error) {
@@ -305,7 +305,7 @@ func (p *PhotoService) Save(photo *Photo) (bool, error) {
 	defer p.mux.Unlock()
 	o := options.Update()
 	o.SetUpsert(true)
-	re, err := p.col.UpdateOne(nil, bson.M{"id":photo.ID}, bson.M{"$set":photo}, o)
+	re, err := p.col.UpdateOne(nil, bson.M{"id": photo.ID}, bson.M{"$set": photo}, o)
 	if err != nil {
 		return false, err
 	}
@@ -314,7 +314,7 @@ func (p *PhotoService) Save(photo *Photo) (bool, error) {
 
 func SaveFullPhoto(userId string, albumId string, photoId string, link string) {
 	os.MkdirAll(fmt.Sprintf("./storage/%s", userId), 0777)
-	f, err := os.OpenFile(fmt.Sprintf("./storage/%s/%s_%s.jpg", userId, albumId, photoId), os.O_WRONLY | os.O_CREATE, 0777)
+	f, err := os.OpenFile(fmt.Sprintf("./storage/%s/%s_%s.jpg", userId, albumId, photoId), os.O_WRONLY|os.O_CREATE, 0777)
 	if err != nil {
 		panic(err)
 	}
@@ -376,14 +376,14 @@ func recursiveSearch(as *AccountService, account fb.Account, ws *WorkerAccountSe
 	foundPhotos := 0
 	for _, album := range albums {
 		var i = 0
-		photos, more, err := worker.GetAlbumPhotosIDS(account, album, i * 12)
+		photos, more, err := worker.GetAlbumPhotosIDS(account, album, i*12)
 		if err != nil {
 			return err
 		}
 		i++
 		var temp []string
 		for more && len(photos) < maxPhotos {
-			temp, more, err = worker.GetAlbumPhotosIDS(account, album, i * 12)
+			temp, more, err = worker.GetAlbumPhotosIDS(account, album, i*12)
 			if err != nil {
 				return err
 			}
@@ -436,7 +436,7 @@ func recursiveSearch(as *AccountService, account fb.Account, ws *WorkerAccountSe
 		}
 		foundFriends = len(friends)
 		for _, friend := range friends {
-			enqueueCrawl(as, friend, ws, depth - 1, maxPhotos)
+			enqueueCrawl(as, friend, ws, depth-1, maxPhotos)
 		}
 	}
 	logAnything(fmt.Sprintf("%s[%s]: %d photos, %d freinds", account.Nickname, account.ID, foundPhotos, foundFriends))
@@ -482,11 +482,11 @@ func logAnything(v interface{}) {
 }
 
 type RecursCommand struct {
-	WorkerService		*WorkerAccountService
-	AccountService		*AccountService
-	Account				fb.Account
-	Depth				int
-	MaxPhotos			int
+	WorkerService  *WorkerAccountService
+	AccountService *AccountService
+	Account        fb.Account
+	Depth          int
+	MaxPhotos      int
 }
 
 func (r RecursCommand) Handle() error {
@@ -497,7 +497,7 @@ func (r RecursCommand) Handle() error {
 		session.IncrementAccountTasksDone()
 	}()
 
-	for time.Now().Sub(start) < 15 * time.Minute {
+	for time.Now().Sub(start) < 15*time.Minute {
 		w, err := r.WorkerService.FindNextRandom()
 		if err != nil {
 			logError(err)
@@ -519,8 +519,8 @@ func (r RecursCommand) Handle() error {
 }
 
 type PhotoFullCommand struct {
-	WorkerService		*WorkerAccountService
-	Photo				Photo
+	WorkerService *WorkerAccountService
+	Photo         Photo
 }
 
 func (p PhotoFullCommand) Handle() error {
@@ -530,7 +530,7 @@ func (p PhotoFullCommand) Handle() error {
 	}()
 	start := time.Now()
 
-	for time.Now().Sub(start) < 15 * time.Minute {
+	for time.Now().Sub(start) < 15*time.Minute {
 		w, err := p.WorkerService.FindNextRandom()
 		if err != nil {
 			logError(err)
@@ -566,18 +566,18 @@ func enqueuePhotoFull(ws *WorkerAccountService, p Photo) {
 
 	photoQueue.Enqueue(&PhotoFullCommand{
 		WorkerService: ws,
-		Photo: p,
+		Photo:         p,
 	})
 }
 
 func enqueueCrawl(as *AccountService, account fb.Account, ws *WorkerAccountService, depth int, maxPhotos int) {
 	session.IncrementAccountTasksAwaiting()
 	taskQueue.Enqueue(&RecursCommand{
-		WorkerService: ws,
+		WorkerService:  ws,
 		AccountService: as,
-		Account: account,
-		Depth: depth,
-		MaxPhotos: maxPhotos,
+		Account:        account,
+		Depth:          depth,
+		MaxPhotos:      maxPhotos,
 	})
 }
 
@@ -587,7 +587,7 @@ var photoService *PhotoService
 
 func stdResolve(s string) *fb.Place {
 	decoded := ""
-	json.Unmarshal([]byte("\"" + s + "\""), &decoded)
+	json.Unmarshal([]byte("\""+s+"\""), &decoded)
 	place, err := ps.FindByNameOrCreate(decoded, func(place *fb.Place) {
 		//TODO: "go" this shit for the sake of performance
 		go func(place *fb.Place) {
@@ -618,12 +618,12 @@ func main() {
 		"db",
 		"mongodb://127.0.0.1:27017/parser",
 		"use a valid mongodb connection uri mongodb://[username:password@]host[:port][/[database]]",
-		)
+	)
 	errLogString := flag.String(
 		"errlog",
 		fmt.Sprintf("%s_err.log", time.Now().Format("20060102")),
 		"filename or 'stderr' keyword (daily rotation files used by default) for error logging",
-		)
+	)
 
 	logString := flag.String(
 		"log",
@@ -668,7 +668,7 @@ func main() {
 	db := client.Database(connString.Database)
 
 	if *errLogString != "stderr" {
-		f, err := os.OpenFile(fmt.Sprintf("./%s", *errLogString), os.O_WRONLY | os.O_APPEND | os.O_CREATE, 0777)
+		f, err := os.OpenFile(fmt.Sprintf("./%s", *errLogString), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0777)
 		if err != nil {
 			panic(err)
 		}
@@ -677,7 +677,7 @@ func main() {
 	}
 
 	if *logString != "stdout" {
-		f, err := os.OpenFile(fmt.Sprintf("./%s", *logString), os.O_WRONLY | os.O_APPEND | os.O_CREATE, 0777)
+		f, err := os.OpenFile(fmt.Sprintf("./%s", *logString), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0777)
 		if err != nil {
 			panic(err)
 		}
@@ -701,7 +701,7 @@ func main() {
 
 	ps = &PlaceService{db.Collection("Places"), sync.Mutex{}, sync.Mutex{}}
 	cs = &CountryService{db.Collection("Countries")}
-	ws := WorkerAccountService{ db.Collection("Workers"), sync.Mutex{}}
+	ws := WorkerAccountService{db.Collection("Workers"), sync.Mutex{}}
 	as := AccountService{db.Collection("Accounts"), sync.Mutex{}}
 
 	photoService = &PhotoService{db.Collection("Photos"), sync.Mutex{}}
@@ -722,7 +722,7 @@ func main() {
 		}
 	} else if *workersAddMode {
 		if !*fileMode {
-			vrx := regexp.MustCompile("(.*?):(.*?)\\|((?:(?:(?:https?)|(?:socks(?:4|5))):\\/\\/)?(?:(.*?):(.*?)@)?(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?):[0-9]{2,4})")
+			vrx := regexp.MustCompile("([^:]+):([^|]+)(?:\\|((?:(?:(?:https?)|(?:socks(?:4|5))):\\/\\/)?(?:(.+?):(.+?)@)?(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?):[0-9]{2,4}))?")
 			for _, arg := range args {
 				matches := vrx.FindAllSubmatch([]byte(arg), -1)
 				if len(matches) == 1 {
@@ -759,21 +759,21 @@ func isNumeric(s string) bool {
 }
 
 type SessionStatistics struct {
-	AccountsAdded				int			`json:"accounts_added"`
-	AccountTasksDone			int			`json:"account_tasks_done"`
-	AccountTasksAwaiting 		int			`json:"account_tasks_awaiting"`
+	AccountsAdded        int `json:"accounts_added"`
+	AccountTasksDone     int `json:"account_tasks_done"`
+	AccountTasksAwaiting int `json:"account_tasks_awaiting"`
 
-	PhotosDownloaded			int			`json:"photo_downloaded"`
+	PhotosDownloaded int `json:"photo_downloaded"`
 
-	PhotoTasksDone				int			`json:"photo_tasks_done"`
-	PhotoTasksAwaiting			int			`json:"photo_tasks_awaiting"`
+	PhotoTasksDone     int `json:"photo_tasks_done"`
+	PhotoTasksAwaiting int `json:"photo_tasks_awaiting"`
 
-	aamux						sync.Mutex	`json:"-"`
-	tdmux						sync.Mutex	`json:"-"`
-	tamux						sync.Mutex	`json:"-"`
-	pdmux						sync.Mutex	`json:"-"`
-	ptamux						sync.Mutex	`json:"-"`
-	ptdmux						sync.Mutex	`json:"-"`
+	aamux  sync.Mutex `json:"-"`
+	tdmux  sync.Mutex `json:"-"`
+	tamux  sync.Mutex `json:"-"`
+	pdmux  sync.Mutex `json:"-"`
+	ptamux sync.Mutex `json:"-"`
+	ptdmux sync.Mutex `json:"-"`
 }
 
 func (s *SessionStatistics) IncrementAccountsAdded() {

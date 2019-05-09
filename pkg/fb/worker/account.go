@@ -1,74 +1,67 @@
 package worker
 
 import (
-	"net/http"
-	"net/url"
-	"net/http/cookiejar"
-	"net"
-	"time"
-	"github.com/gordy96/fb_parser/pkg/fb/util"
-	"strings"
-	"github.com/gordy96/fb_parser/pkg/fb"
-	"strconv"
-	"fmt"
 	"bytes"
-	"encoding/json"
 	"encoding/base64"
-	"io/ioutil"
-	"net/http/httputil"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"regexp"
+	"encoding/json"
+	"fmt"
+	"github.com/gordy96/fb_parser/pkg/fb"
+	"github.com/gordy96/fb_parser/pkg/fb/util"
 	"github.com/gordy96/fb_parser/pkg/fb/worker/errors"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"io/ioutil"
+	"net/http"
+	"net/http/cookiejar"
+	"net/http/httputil"
+	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
 )
 
 var (
-	loginFields = []string{"had_cp_prefilled","had_password_prefilled","m_sess","jazoest","__req","__ajax__","li","unrecognized_tries","email","prefill_type","fb_dtsg","m_ts","try_number","prefill_source","first_prefill_source","lsd","__user","__dyn","pass","prefill_contact_point","first_prefill_type","is_smart_lock"}
+	loginFields = []string{"had_cp_prefilled", "had_password_prefilled", "m_sess", "jazoest", "__req", "__ajax__", "li", "unrecognized_tries", "email", "prefill_type", "fb_dtsg", "m_ts", "try_number", "prefill_source", "first_prefill_source", "lsd", "__user", "__dyn", "pass", "prefill_contact_point", "first_prefill_type", "is_smart_lock"}
 )
 
 type AccountStatus string
 
 const (
-	Available	AccountStatus	=	"available"
-	Busy		AccountStatus	=	"busy"
-	Error		AccountStatus	=	"error"
+	Available AccountStatus = "available"
+	Busy      AccountStatus = "busy"
+	Error     AccountStatus = "error"
 )
 
 type FBAccount struct {
-	Email 		string			`json:"email" bson:"email"`
-	Password	string			`json:"password" bson:"password"`
-	Proxy		string			`json:"proxy" bson:"proxy"`
-	Env 		Env				`json:"-" bson:"env"`
-	Status		AccountStatus	`json:"status" bson:"status"`
-	cl			http.Client		`json:"-" bson:"-"`
+	Email    string        `json:"email" bson:"email"`
+	Password string        `json:"password" bson:"password"`
+	Proxy    string        `json:"proxy" bson:"proxy"`
+	Env      Env           `json:"-" bson:"env"`
+	Status   AccountStatus `json:"status" bson:"status"`
+	cl       http.Client   `json:"-" bson:"-"`
 }
 
 func NewFBAccount(email, password string, proxy string) *FBAccount {
 	acc := &FBAccount{
 		Password: password,
-		Email: email,
-		Proxy: proxy,
-		Status: Available,
+		Email:    email,
+		Proxy:    proxy,
+		Status:   Available,
 	}
 	acc.Init()
 	return acc
 }
 
 func (a *FBAccount) Init() {
-	proxyUrl, _ := url.Parse(a.Proxy)
 	jar, _ := cookiejar.New(nil)
 	a.cl = http.Client{
-		Transport: &http.Transport{
-			Proxy: http.ProxyURL(proxyUrl),
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			MaxIdleConns:          100,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-		},
 		Jar: jar,
+	}
+	if a.Proxy != "" {
+		proxyUrl, _ := url.Parse(a.Proxy)
+		a.cl.Transport = &http.Transport{
+			Proxy: http.ProxyURL(proxyUrl),
+		}
 	}
 	u, _ := url.Parse("https://m.facebook.com")
 	a.cl.Jar.SetCookies(u, a.Env.Cookies)
@@ -76,8 +69,6 @@ func (a *FBAccount) Init() {
 
 func (a *FBAccount) do(req *http.Request) (*http.Response, error) {
 	resp, err := a.cl.Do(req)
-
-
 
 	return resp, err
 }
@@ -92,10 +83,10 @@ func (a *FBAccount) Login() error {
 		panic(err)
 	}
 
-	a.Env = MakeEnv(resp, a.Email + ":" + a.Password)
+	a.Env = MakeEnv(resp, a.Email+":"+a.Password)
 	req = util.MakeRequest(
 		"POST",
-		util.Host + "/login/device-based/login/async/?refsrc=https%3A%2F%2Fwww.facebook.com%2F&lwv=100&jio_prefilled=false",
+		util.Host+"/login/device-based/login/async/?refsrc=https%3A%2F%2Fwww.facebook.com%2F&lwv=100&jio_prefilled=false",
 		strings.NewReader(a.Env.MakeBody(loginFields).Encode()))
 
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
@@ -131,7 +122,7 @@ func (a *FBAccount) Login() error {
 	a.Env.Increment()
 	a.Env.Set("__user", uid)
 
-	req = util.MakeRequest("GET", util.Host + "/login/save-device/?login_source=login", nil)
+	req = util.MakeRequest("GET", util.Host+"/login/save-device/?login_source=login", nil)
 
 	resp, err = a.do(req)
 
@@ -151,7 +142,7 @@ func (a *FBAccount) Login() error {
 	return nil
 }
 
-func (a *FBAccount) GetUserInfo(user *fb.Account) (error) {
+func (a *FBAccount) GetUserInfo(user *fb.Account) error {
 	var req *http.Request
 	var resp *http.Response
 	var err error
@@ -172,7 +163,7 @@ func (a *FBAccount) GetUserInfo(user *fb.Account) (error) {
 
 	var q url.Values
 
-	req = util.MakeRequest("GET", util.Host + "/profile.php", nil)
+	req = util.MakeRequest("GET", util.Host+"/profile.php", nil)
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	ctime := strconv.FormatInt(time.Now().Unix(), 10)
 	a.Env.Set("ctime", ctime)
@@ -194,7 +185,6 @@ func (a *FBAccount) GetUserInfo(user *fb.Account) (error) {
 	q.Set("v", "info")
 	q.Set("jazoest", jazoest([]byte(q.Get("fb_dtsg_ag"))))
 
-
 	sq := url.Values{}
 
 	sq.Set("lst", q.Get("lst"))
@@ -205,23 +195,23 @@ func (a *FBAccount) GetUserInfo(user *fb.Account) (error) {
 	encoder := json.NewEncoder(r)
 	encoder.SetEscapeHTML(false)
 	m := map[string]string{
-		"s":"m",
-		"r":referer,
-		"h":referer,
+		"s": "m",
+		"r": referer,
+		"h": referer,
 	}
 	encoder.Encode(&m)
 
 	req.AddCookie(&http.Cookie{
-		Name: "x-referer",
-		Value: base64.RawStdEncoding.EncodeToString(r.Bytes()),
-		Path: "/",
+		Name:   "x-referer",
+		Value:  base64.RawStdEncoding.EncodeToString(r.Bytes()),
+		Path:   "/",
 		Domain: ".facebook.com",
 	})
 
 	req.URL.RawQuery = q.Encode()
-	req.Header.Set("Referer", util.Host + referer)
-	req.Header.Set("Accept","*/*")
-	req.Header.Set("X-Response-Format","JSONStream")
+	req.Header.Set("Referer", util.Host+referer)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("X-Response-Format", "JSONStream")
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
 	resp, err = a.do(req)
@@ -247,8 +237,8 @@ func (a *FBAccount) GetUserInfo(user *fb.Account) (error) {
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
 		return errors.ParsingError{
-			Stage: fmt.Sprintf("GetUserInfo (parsing name for %s[%s])", user.Nickname, user.ID),
-			Request: rawReq,
+			Stage:    fmt.Sprintf("GetUserInfo (parsing name for %s[%s])", user.Nickname, user.ID),
+			Request:  rawReq,
 			Response: rawResp,
 		}
 	}
@@ -268,8 +258,8 @@ func (a *FBAccount) GetUserInfo(user *fb.Account) (error) {
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
 		return errors.GenderUndefinedError{
-			Stage: fmt.Sprintf("GetUserInfo (parsing gender for %s[%s])", user.Nickname, user.ID),
-			Request: rawReq,
+			Stage:    fmt.Sprintf("GetUserInfo (parsing gender for %s[%s])", user.Nickname, user.ID),
+			Request:  rawReq,
 			Response: rawResp,
 		}
 	}
@@ -281,7 +271,7 @@ func (a *FBAccount) GetUserInfo(user *fb.Account) (error) {
 	places := parsePlaces(responseContent)
 	if len(places) > 0 {
 		user.Places = make([]primitive.ObjectID, len(places))
-		for i, p :=  range places {
+		for i, p := range places {
 			user.Places[i] = ResolvePlace(p).ID
 		}
 		ht := ResolvePlace(parseHometown(responseContent))
@@ -305,7 +295,7 @@ func (a *FBAccount) GetUserAlbums(user *fb.Account) ([]string, error) {
 	var err error
 	var q url.Values
 
-	req = util.MakeRequest("GET",  util.Host + "/profile.php", nil)
+	req = util.MakeRequest("GET", util.Host+"/profile.php", nil)
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	ctime := strconv.FormatInt(time.Now().Unix(), 10)
 	a.Env.Set("ctime", ctime)
@@ -327,7 +317,6 @@ func (a *FBAccount) GetUserAlbums(user *fb.Account) ([]string, error) {
 	q.Set("v", "photos")
 	q.Set("jazoest", jazoest([]byte(q.Get("fb_dtsg_ag"))))
 
-
 	sq := url.Values{}
 
 	sq.Set("lst", q.Get("lst"))
@@ -338,23 +327,23 @@ func (a *FBAccount) GetUserAlbums(user *fb.Account) ([]string, error) {
 	encoder := json.NewEncoder(r)
 	encoder.SetEscapeHTML(false)
 	m := map[string]string{
-		"s":"m",
-		"r":referer,
-		"h":referer,
+		"s": "m",
+		"r": referer,
+		"h": referer,
 	}
 	encoder.Encode(&m)
 
 	req.AddCookie(&http.Cookie{
-		Name: "x-referer",
-		Value: base64.RawStdEncoding.EncodeToString(r.Bytes()),
-		Path: "/",
+		Name:   "x-referer",
+		Value:  base64.RawStdEncoding.EncodeToString(r.Bytes()),
+		Path:   "/",
 		Domain: ".facebook.com",
 	})
 
 	req.URL.RawQuery = q.Encode()
-	req.Header.Set("Referer", util.Host + referer)
-	req.Header.Set("Accept","*/*")
-	req.Header.Set("X-Response-Format","JSONStream")
+	req.Header.Set("Referer", util.Host+referer)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("X-Response-Format", "JSONStream")
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
 	resp, err = a.do(req)
@@ -379,8 +368,8 @@ func (a *FBAccount) GetUserAlbums(user *fb.Account) ([]string, error) {
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
 		err = errors.NoAlbumsError{
-			Stage: fmt.Sprintf("GetUserAlbums (parsing albums for %s[%s])", user.Nickname, user.ID),
-			Request: rawReq,
+			Stage:    fmt.Sprintf("GetUserAlbums (parsing albums for %s[%s])", user.Nickname, user.ID),
+			Request:  rawReq,
 			Response: rawResp,
 		}
 		return nil, err
@@ -400,7 +389,7 @@ func (a *FBAccount) GetUserFriendsList(user *fb.Account, cursor string) ([]fb.Ac
 
 	var q url.Values
 	if cursor == "" {
-		req = util.MakeRequest("GET",  util.Host + "/profile.php", nil)
+		req = util.MakeRequest("GET", util.Host+"/profile.php", nil)
 		req.Header.Set("X-Requested-With", "XMLHttpRequest")
 		ctime := strconv.FormatInt(time.Now().Unix(), 10)
 		a.Env.Set("ctime", ctime)
@@ -433,7 +422,7 @@ func (a *FBAccount) GetUserFriendsList(user *fb.Account, cursor string) ([]fb.Ac
 		b.Set("m_sess", "")
 		b.Set("jazoest", jazoest([]byte(b.Get("fb_dtsg"))))
 
-		req = util.MakeRequest("POST",  util.Host + "/profile.php", strings.NewReader(b.Encode()))
+		req = util.MakeRequest("POST", util.Host+"/profile.php", strings.NewReader(b.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 		q = url.Values{}
@@ -443,7 +432,6 @@ func (a *FBAccount) GetUserFriendsList(user *fb.Account, cursor string) ([]fb.Ac
 		q.Set("unit_cursor", cursor)
 	}
 	q.Set("v", "friends")
-
 
 	sq := url.Values{}
 	sq.Set("id", user.ID)
@@ -455,23 +443,23 @@ func (a *FBAccount) GetUserFriendsList(user *fb.Account, cursor string) ([]fb.Ac
 	encoder := json.NewEncoder(r)
 	encoder.SetEscapeHTML(false)
 	m := map[string]string{
-		"s":"m",
-		"r":referer,
-		"h":referer,
+		"s": "m",
+		"r": referer,
+		"h": referer,
 	}
 	encoder.Encode(&m)
 
 	req.AddCookie(&http.Cookie{
-		Name: "x-referer",
-		Value: base64.RawStdEncoding.EncodeToString(r.Bytes()),
-		Path: "/",
+		Name:   "x-referer",
+		Value:  base64.RawStdEncoding.EncodeToString(r.Bytes()),
+		Path:   "/",
 		Domain: ".facebook.com",
 	})
 
 	req.URL.RawQuery = q.Encode()
-	req.Header.Set("Referer", util.Host + referer)
-	req.Header.Set("Accept","*/*")
-	req.Header.Set("X-Response-Format","JSONStream")
+	req.Header.Set("Referer", util.Host+referer)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("X-Response-Format", "JSONStream")
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
 	resp, err = a.do(req)
@@ -506,8 +494,8 @@ func (a *FBAccount) GetUserFriendsList(user *fb.Account, cursor string) ([]fb.Ac
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
 		err = errors.NoFriendsError{
-			Stage: fmt.Sprintf("GetUserFriendsList (parsing friends for %s[%s])", user.Nickname, user.ID),
-			Request: rawReq,
+			Stage:    fmt.Sprintf("GetUserFriendsList (parsing friends for %s[%s])", user.Nickname, user.ID),
+			Request:  rawReq,
 			Response: rawResp,
 		}
 		return nil, "", err
@@ -522,7 +510,7 @@ func (a *FBAccount) GetIDFromNickname(nickname string) (string, error) {
 	var err error
 	var q url.Values
 
-	req = util.MakeRequest("GET",  util.Host + "/" + nickname, nil)
+	req = util.MakeRequest("GET", util.Host+"/"+nickname, nil)
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	ctime := strconv.FormatInt(time.Now().Unix(), 10)
 	a.Env.Set("ctime", ctime)
@@ -541,7 +529,6 @@ func (a *FBAccount) GetIDFromNickname(nickname string) (string, error) {
 	q.Set("__m_async_page__", "")
 	q.Set("jazoest", jazoest([]byte(q.Get("fb_dtsg_ag"))))
 
-
 	sq := url.Values{}
 
 	sq.Set("lst", q.Get("lst"))
@@ -552,23 +539,23 @@ func (a *FBAccount) GetIDFromNickname(nickname string) (string, error) {
 	encoder := json.NewEncoder(r)
 	encoder.SetEscapeHTML(false)
 	m := map[string]string{
-		"s":"m",
-		"r":referer,
-		"h":referer,
+		"s": "m",
+		"r": referer,
+		"h": referer,
 	}
 	encoder.Encode(&m)
 
 	req.AddCookie(&http.Cookie{
-		Name: "x-referer",
-		Value: base64.RawStdEncoding.EncodeToString(r.Bytes()),
-		Path: "/",
+		Name:   "x-referer",
+		Value:  base64.RawStdEncoding.EncodeToString(r.Bytes()),
+		Path:   "/",
 		Domain: ".facebook.com",
 	})
 
 	req.URL.RawQuery = q.Encode()
-	req.Header.Set("Referer", util.Host + referer)
-	req.Header.Set("Accept","*/*")
-	req.Header.Set("X-Response-Format","JSONStream")
+	req.Header.Set("Referer", util.Host+referer)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("X-Response-Format", "JSONStream")
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
 	resp, err = a.do(req)
@@ -591,13 +578,12 @@ func (a *FBAccount) GetIDFromNickname(nickname string) (string, error) {
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
 		err = errors.ParsingError{
-			Stage: fmt.Sprintf("GetIdFromNickname (%s)", nickname),
-			Request: rawReq,
+			Stage:    fmt.Sprintf("GetIdFromNickname (%s)", nickname),
+			Request:  rawReq,
 			Response: rawResp,
 		}
 		return "", err
 	}
-
 
 	return id, nil
 }
@@ -608,13 +594,13 @@ func (a *FBAccount) GetAlbumPhotosIDS(user fb.Account, album string, offset int)
 	var err error
 	var q url.Values
 
-	req = util.MakeRequest("GET",  util.Host + "/media/set/", nil)
+	req = util.MakeRequest("GET", util.Host+"/media/set/", nil)
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
 	q = url.Values{}
 
-	q.Set("set", "a." + album)
-	q.Set("s", strconv.FormatInt(int64(offset * 12), 10))
+	q.Set("set", "a."+album)
+	q.Set("s", strconv.FormatInt(int64(offset*12), 10))
 	q.Set("mode", "albumpermalink")
 
 	referer := "/"
@@ -631,23 +617,23 @@ func (a *FBAccount) GetAlbumPhotosIDS(user fb.Account, album string, offset int)
 	encoder := json.NewEncoder(r)
 	encoder.SetEscapeHTML(false)
 	m := map[string]string{
-		"s":"m",
-		"r":referer,
-		"h":referer,
+		"s": "m",
+		"r": referer,
+		"h": referer,
 	}
 	encoder.Encode(&m)
 
 	req.AddCookie(&http.Cookie{
-		Name: "x-referer",
-		Value: base64.RawStdEncoding.EncodeToString(r.Bytes()),
-		Path: "/",
+		Name:   "x-referer",
+		Value:  base64.RawStdEncoding.EncodeToString(r.Bytes()),
+		Path:   "/",
 		Domain: ".facebook.com",
 	})
 
 	req.URL.RawQuery = q.Encode()
-	req.Header.Set("Referer",  util.Host + referer)
-	req.Header.Set("Accept","*/*")
-	req.Header.Set("X-Response-Format","JSONStream")
+	req.Header.Set("Referer", util.Host+referer)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("X-Response-Format", "JSONStream")
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
 	resp, err = a.do(req)
@@ -672,8 +658,8 @@ func (a *FBAccount) GetAlbumPhotosIDS(user fb.Account, album string, offset int)
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
 		err = errors.ParsingError{
-			Stage: fmt.Sprintf("GetAlbumPhotosIDS (parsing photo ids from %s (%s[%s]))", album, user.Nickname, user.ID),
-			Request: rawReq,
+			Stage:    fmt.Sprintf("GetAlbumPhotosIDS (parsing photo ids from %s (%s[%s]))", album, user.Nickname, user.ID),
+			Request:  rawReq,
 			Response: rawResp,
 		}
 		return nil, false, err
@@ -688,7 +674,7 @@ func (a *FBAccount) GetPhotoFull(id string) (string, error) {
 	var err error
 	var q url.Values
 
-	req = util.MakeRequest("GET",  util.Host + "/photo/view_full_size/", nil)
+	req = util.MakeRequest("GET", util.Host+"/photo/view_full_size/", nil)
 
 	q = url.Values{}
 
@@ -697,7 +683,7 @@ func (a *FBAccount) GetPhotoFull(id string) (string, error) {
 	q.Set("ref_page", "/wap/photo.php")
 
 	req.URL.RawQuery = q.Encode()
-	req.Header.Set("Accept","*/*")
+	req.Header.Set("Accept", "*/*")
 
 	resp, err = a.do(req)
 
@@ -722,14 +708,14 @@ func (a *FBAccount) GetPhotoFull(id string) (string, error) {
 		rawReq, _ := httputil.DumpRequestOut(req, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
 		err = errors.ParsingError{
-			Stage: fmt.Sprintf("GetPhotoFull (parsing full link for %s)", id),
-			Request: rawReq,
+			Stage:    fmt.Sprintf("GetPhotoFull (parsing full link for %s)", id),
+			Request:  rawReq,
 			Response: rawResp,
 		}
 		return "", err
 	}
 
-	err = json.Unmarshal([]byte("\"" + parsePhotoFullLink(buf) + "\""), &l)
+	err = json.Unmarshal([]byte("\""+parsePhotoFullLink(buf)+"\""), &l)
 
 	if err != nil {
 		return "", err
@@ -769,7 +755,7 @@ func composeAccounts(links []string) []fb.Account {
 		for i, link := range links {
 			if p := strings.Index(link, "id="); p > 0 {
 				sp := p + 3
-				lp := strings.Index(link,"&amp;")
+				lp := strings.Index(link, "&amp;")
 				ret[i] = fb.Account{
 					ID: link[sp:lp],
 				}
@@ -806,7 +792,7 @@ func parsePhotosLinks(source []byte, album string) []string {
 	return ret
 }
 
-func parseID(source []byte) string{
+func parseID(source []byte) string {
 	re := regexp.MustCompile("currentProfileID\\\\\":([0-9]+)}]")
 	r := re.FindSubmatch(source)
 
