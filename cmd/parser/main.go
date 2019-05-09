@@ -733,10 +733,11 @@ func main() {
 					err = wrk.Login()
 					if err != nil {
 						logError(err)
-						panic(err)
+						logAnything(fmt.Sprintf("error occured on adding %s (see error log)", wrk.Email))
+					} else {
+						logAnything(fmt.Sprintf("found and saved %s", wrk.Email))
+						ws.Save(wrk)
 					}
-					ws.Save(wrk)
-					logAnything(fmt.Sprintf("found and saved %s", wrk.Email))
 				}
 			}
 		}
