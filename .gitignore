@@ -1,5 +1,5 @@
 vendor/
-idea/
+.idea/
 Gopkg.lock
 
 # Binaries for programs and plugins
