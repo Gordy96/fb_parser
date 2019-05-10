@@ -373,6 +373,7 @@ func recursiveSearch(as *AccountService, account fb.Account, ws *WorkerAccountSe
 			return err
 		}
 	}
+	defaultSuspender.Suspend()
 	foundPhotos := 0
 	for _, album := range albums {
 		var i = 0
@@ -506,6 +507,7 @@ func (r RecursCommand) Handle() error {
 
 		if w != nil {
 			err = recursiveSearch(r.AccountService, r.Account, r.WorkerService, w, r.Depth, r.MaxPhotos)
+			time.Sleep(1 * time.Second)
 			r.WorkerService.Release(w)
 			if err != nil {
 				logError(err)
