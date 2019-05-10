@@ -758,10 +758,10 @@ func main() {
 func isNumeric(s string) bool {
 	for _, c := range s {
 		if !unicode.IsLetter(c) {
-			return false
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 type SessionStatistics struct {
