@@ -548,6 +548,7 @@ func (r RecursCommand) Handle() error {
 		w, err := r.WorkerService.FindNextRandom()
 		if err != nil {
 			logError(err)
+			logAnything("worker stops see error log")
 			return err
 		}
 
@@ -559,6 +560,7 @@ func (r RecursCommand) Handle() error {
 			r.WorkerService.Release(w)
 			if err != nil {
 				logError(err)
+				logAnything("worker stops see error log")
 				return err
 			}
 			return nil
@@ -584,18 +586,23 @@ func (p PhotoFullCommand) Handle() error {
 		w, err := p.WorkerService.FindNextRandom()
 		if err != nil {
 			logError(err)
+			logAnything("worker stops see error log")
 			return err
 		}
 
 		if w != nil {
 			fullLink, err := w.GetPhotoFull(p.Photo.ID)
 			if err != nil {
+				logError(err)
+				logAnything("worker stops see error log")
 				return err
 			}
 			_, _ = p.WorkerService.Release(w)
 			p.Photo.FullLink = fullLink
 			_, err = photoService.Save(&p.Photo)
 			if err != nil {
+				logError(err)
+				logAnything("worker stops see error log")
 				return err
 			}
 			//TODO: "go" this shit for the sake of performance
