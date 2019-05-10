@@ -756,12 +756,15 @@ func main() {
 }
 
 func isNumeric(s string) bool {
+	ret := true
 	for _, c := range s {
 		if !unicode.IsLetter(c) {
-			return true
+			ret = true
+		} else {
+			ret = false
 		}
 	}
-	return false
+	return ret
 }
 
 type SessionStatistics struct {
