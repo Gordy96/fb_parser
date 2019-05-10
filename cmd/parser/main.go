@@ -539,9 +539,12 @@ func (p PhotoFullCommand) Handle() error {
 
 		if w != nil {
 			fullLink, err := w.GetPhotoFull(p.Photo.ID)
-			p.WorkerService.Release(w)
+			if err != nil {
+				return err
+			}
+			_, _ = p.WorkerService.Release(w)
 			p.Photo.FullLink = fullLink
-			photoService.Save(&p.Photo)
+			_, err = photoService.Save(&p.Photo)
 			if err != nil {
 				return err
 			}
@@ -657,9 +660,6 @@ func main() {
 	}
 	opts.ApplyURI(*dbString)
 	opts.Auth = nil
-	if err != nil {
-		panic(err)
-	}
 
 	client, err := mongo.Connect(nil, opts)
 
