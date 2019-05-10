@@ -9,13 +9,15 @@ func NewWorker(pool chan chan Command) *Worker {
 		pool,
 		make(chan Command),
 		make(chan bool),
+		false,
 	}
 }
 
 type Worker struct {
-	pool chan chan Command
-	input chan Command
-	quit chan bool
+	pool    chan chan Command
+	input   chan Command
+	quit    chan bool
+	Running bool
 }
 
 func (w *Worker) Start() {
@@ -23,12 +25,13 @@ func (w *Worker) Start() {
 		for {
 			w.pool <- w.input
 			select {
-			case job := <- w.input:
+			case job := <-w.input:
 				err := job.Handle()
 				if err != nil {
 					w.Stop()
 				}
-			case <- w.quit:
+			case <-w.quit:
+				w.Running = false
 				return
 			}
 		}
@@ -43,23 +46,31 @@ func (w *Worker) Stop() {
 
 type Queue struct {
 	WorkerCount int
-	pool chan chan Command
-	jobQueue chan Command
+	Workers     []*Worker
+	Enqueued    int
+	pool        chan chan Command
+	jobQueue    chan Command
+	doneQueue   chan int
 }
 
 func (q *Queue) Run() {
 	for i := 0; i < q.WorkerCount; i++ {
 		worker := NewWorker(q.pool)
 		worker.Start()
+		q.Workers[i] = worker
 	}
 	go func() {
 		for {
 			select {
-			case job := <- q.jobQueue:
+			case job := <-q.jobQueue:
+				q.Enqueued++
 				go func(c Command) {
-					workerChan := <- q.pool
+					workerChan := <-q.pool
 					workerChan <- c
+					q.doneQueue <- 1
 				}(job)
+			case <-q.doneQueue:
+				q.Enqueued--
 			}
 		}
 	}()
@@ -71,9 +82,12 @@ func (q *Queue) Enqueue(c Command) {
 
 func NewQueue(numWorkers int) *Queue {
 	q := &Queue{
-		pool: make(chan chan Command),
+		pool:        make(chan chan Command),
 		WorkerCount: numWorkers,
-		jobQueue: make(chan Command),
+		jobQueue:    make(chan Command),
+		doneQueue:   make(chan int),
+		Workers:     make([]*Worker, numWorkers),
+		Enqueued:    0,
 	}
 	return q
 }
