@@ -560,8 +560,7 @@ func (r RecursCommand) Handle() error {
 			r.WorkerService.Release(w)
 			if err != nil {
 				logError(err)
-				logAnything("worker stops see error log")
-				return err
+				logAnything("worker got critical exception. See logs")
 			}
 			return nil
 		}
