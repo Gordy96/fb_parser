@@ -67,3 +67,13 @@ type WorkerCheckpointError struct {
 func(u WorkerCheckpointError) Error() string {
 	return "account on checkpoint"
 }
+
+
+type BrokenLinkCheckpoint struct {
+	Request		[]byte
+	Response	[]byte
+}
+
+func(u BrokenLinkCheckpoint) Error() string {
+	return "broken link checkpoint"
+}

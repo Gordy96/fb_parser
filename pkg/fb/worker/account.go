@@ -79,6 +79,13 @@ func handleResponseBasedErrors(resp *http.Response) ([]byte, error) {
 		err.Request = rawReq
 		err.Response = rawResp
 		return nil, err
+	} else if strings.Index(string(respBuf), "link you followed may be broken, or the page may have been removed") > 0 {
+		err := errors.WorkerCheckpointError{}
+		rawReq, _ := httputil.DumpRequestOut(resp.Request, true)
+		rawResp, _ := httputil.DumpResponse(resp, true)
+		err.Request = rawReq
+		err.Response = rawResp
+		return nil, err
 	}
 
 	return respBuf, nil

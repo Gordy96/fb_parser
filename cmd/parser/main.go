@@ -462,7 +462,7 @@ func logError(e error) {
 	defer logMux.Unlock()
 	l := func(err error, req []byte, resp []byte) {
 		errlog.Printf(
-			"[%s] ERROR: %s\nREQUEST: %s\nRESPONSE: %s\n",
+			"[%s] ERROR: %s\nREQUEST: %s\nRESPONSE: %s\n\n____________________________________________________",
 			time.Now().Format(time.RFC3339),
 			err,
 			req,
@@ -481,6 +481,8 @@ func logError(e error) {
 	case errors2.GenderUndefinedError:
 		l(err, err.Request, err.Response)
 	case errors2.WorkerCheckpointError:
+		l(err, err.Request, err.Response)
+	case errors2.BrokenLinkCheckpoint:
 		l(err, err.Request, err.Response)
 	default:
 		errlog.Printf("[%s] ERROR: %v\n", time.Now().Format(time.RFC3339), err)
@@ -504,6 +506,8 @@ type DelayDiveCommand struct {
 }
 
 func (d DelayDiveCommand) Handle() error {
+	//sleepMillis(20000)
+	//return nil
 	if d.ShouldWait {
 		time.Sleep(time.Duration(maxDelay) * time.Millisecond)
 	}

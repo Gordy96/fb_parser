@@ -12,7 +12,7 @@ import (
 
 func MakeRequest(method string, uri string, body io.Reader) *http.Request {
 	req, _ := http.NewRequest(method, uri, body)
-	req.Header.Set("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 12_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.0 Mobile/15E148 Safari/604.1")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (iPhone; CPU OS 10_14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/11.1.1 Mobile/14E304 Safari/605.1.15")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-GB,en-US;q=0.9,en;q=0.8")
 	req.Header.Set("Accept-Encoding", "deflate")
