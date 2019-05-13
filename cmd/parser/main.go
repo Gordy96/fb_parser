@@ -613,6 +613,7 @@ func (p PhotoFullCommand) Handle() error {
 					logAnything("worker got checkpoint")
 					p.WorkerService.Disable(w)
 				}
+				return nil
 			}
 			_, _ = p.WorkerService.Release(w)
 			p.Photo.FullLink = fullLink
