@@ -593,8 +593,7 @@ func (p PhotoFullCommand) Handle() error {
 			fullLink, err := w.GetPhotoFull(p.Photo.ID)
 			if err != nil {
 				logError(err)
-				logAnything("worker stops see error log")
-				return err
+				logAnything("worker got critical exception. See logs")
 			}
 			_, _ = p.WorkerService.Release(w)
 			p.Photo.FullLink = fullLink
