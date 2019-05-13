@@ -30,18 +30,6 @@ type Suspender interface {
 	Suspend()
 }
 
-type CooldownSuspender struct {
-	dur time.Duration
-}
-
-func (c CooldownSuspender) Suspend() {
-	time.Sleep(c.dur)
-}
-
-var defaultSuspender = CooldownSuspender{
-	200 * time.Millisecond,
-}
-
 type AccountService struct {
 	col *mongo.Collection
 	mux sync.Mutex
@@ -336,6 +324,12 @@ func CheckSavedPhoto(userId string, albumId string, photoId string) bool {
 	return true
 }
 
+func sleepMillis(dur int) {
+	if dur > 0 {
+		time.Sleep(time.Duration(dur) * time.Millisecond)
+	}
+}
+
 func recursiveSearch(as *AccountService, account fb.Account, ws *WorkerAccountService, worker *worker.FBAccount, depth int, maxPhotos int, minPhotos int) error {
 	if account.ID == "" {
 		if account.Nickname == "" {
@@ -363,6 +357,7 @@ func recursiveSearch(as *AccountService, account fb.Account, ws *WorkerAccountSe
 	}
 	as.Save(&account)
 	session.IncrementAccountsAdded()
+	sleepMillis(worker.RequestTimeout)
 	albums, err := worker.GetUserAlbums(&account)
 	if err != nil {
 		switch e := err.(type) {
@@ -373,7 +368,7 @@ func recursiveSearch(as *AccountService, account fb.Account, ws *WorkerAccountSe
 			return err
 		}
 	}
-	//defaultSuspender.Suspend()
+	sleepMillis(worker.RequestTimeout)
 	foundPhotos := 0
 	for _, album := range albums {
 		var i = 0
@@ -383,6 +378,7 @@ func recursiveSearch(as *AccountService, account fb.Account, ws *WorkerAccountSe
 		}
 		i++
 		var temp []string
+		sleepMillis(worker.RequestTimeout)
 		for more && len(photos) < maxPhotos {
 			temp, more, err = worker.GetAlbumPhotosIDS(account, album, i*12)
 			if err != nil {
@@ -390,7 +386,7 @@ func recursiveSearch(as *AccountService, account fb.Account, ws *WorkerAccountSe
 			}
 			photos = append(photos, temp...)
 			i++
-			//defaultSuspender.Suspend()
+			sleepMillis(worker.RequestTimeout)
 		}
 		if len(photos) >= minPhotos {
 			for _, id := range photos {
@@ -415,6 +411,7 @@ func recursiveSearch(as *AccountService, account fb.Account, ws *WorkerAccountSe
 				return err
 			}
 		}
+		sleepMillis(worker.RequestTimeout)
 		var temp []fb.Account
 		for cursor != "" {
 			temp, cursor, err = worker.GetUserFriendsList(&account, cursor)
@@ -422,7 +419,7 @@ func recursiveSearch(as *AccountService, account fb.Account, ws *WorkerAccountSe
 				return err
 			}
 			friends = append(friends, temp...)
-			defaultSuspender.Suspend()
+			sleepMillis(worker.RequestTimeout)
 		}
 		if friends != nil {
 			account.Friends = func() []string {
@@ -482,6 +479,8 @@ func logError(e error) {
 	case errors2.NoAlbumsError:
 		l(err, err.Request, err.Response)
 	case errors2.GenderUndefinedError:
+		l(err, err.Request, err.Response)
+	case errors2.WorkerCheckpointError:
 		l(err, err.Request, err.Response)
 	default:
 		errlog.Printf("[%s] ERROR: %v\n", time.Now().Format(time.RFC3339), err)
@@ -554,14 +553,17 @@ func (r RecursCommand) Handle() error {
 
 		if w != nil {
 			err = recursiveSearch(r.AccountService, r.Account, r.WorkerService, w, r.Depth, r.MaxPhotos, r.MinPhotos)
-			if accountCooldownSuspender != nil {
-				accountCooldownSuspender.Suspend()
-			}
-			r.WorkerService.Release(w)
+
+			sleepMillis(w.ReleaseTimeout)
 			if err != nil {
 				logError(err)
 				logAnything("worker got critical exception. See logs")
+				if _, is := err.(errors2.WorkerCheckpointError); is {
+					logAnything("worker got checkpoint")
+					r.WorkerService.Disable(w)
+				}
 			}
+			r.WorkerService.Release(w)
 			return nil
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -594,6 +596,10 @@ func (p PhotoFullCommand) Handle() error {
 			if err != nil {
 				logError(err)
 				logAnything("worker got critical exception. See logs")
+
+				if _, is := err.(errors2.WorkerCheckpointError); is {
+					p.WorkerService.Disable(w)
+				}
 			}
 			_, _ = p.WorkerService.Release(w)
 			p.Photo.FullLink = fullLink
@@ -617,8 +623,6 @@ func (p PhotoFullCommand) Handle() error {
 var taskQueue *queue.Queue
 var photoQueue *queue.Queue
 var delayQueue *queue.Queue
-
-var accountCooldownSuspender *CooldownSuspender = nil
 
 var maxEnqueued int = 0
 var maxDelay = 1000
@@ -710,14 +714,6 @@ func main() {
 	maxPhotos := flag.Int("max_photo", 300, "maximum photos to download per one user")
 
 	minPhotos := flag.Int("min_photo", 30, "minimum photos user must have")
-
-	coolDown := flag.Int("cooldown", 0, "time for worker account to be idle after user parse. In ms")
-
-	if *coolDown > 0 {
-		accountCooldownSuspender = &CooldownSuspender{
-			time.Duration(*coolDown) * time.Millisecond,
-		}
-	}
 
 	flag.StringVar(&google.ProxyString, "geo_proxy", "", "proxy for google maps place resolver")
 

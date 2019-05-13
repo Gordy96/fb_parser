@@ -33,12 +33,14 @@ const (
 )
 
 type FBAccount struct {
-	Email    string        `json:"email" bson:"email"`
-	Password string        `json:"password" bson:"password"`
-	Proxy    string        `json:"proxy" bson:"proxy"`
-	Env      Env           `json:"-" bson:"env"`
-	Status   AccountStatus `json:"status" bson:"status"`
-	cl       http.Client   `json:"-" bson:"-"`
+	Email    		string        `json:"email" bson:"email"`
+	Password 		string        `json:"password" bson:"password"`
+	Proxy    		string        `json:"proxy" bson:"proxy"`
+	Env      		Env           `json:"-" bson:"env"`
+	Status   		AccountStatus `json:"status" bson:"status"`
+	RequestTimeout	int			  `json:"request_timeout" bson:"request_timeout"`
+	ReleaseTimeout	int			  `json:"release_timeout" bson:"release_timeout"`
+	cl       		http.Client   `json:"-" bson:"-"`
 }
 
 func NewFBAccount(email, password string, proxy string) *FBAccount {
@@ -65,6 +67,21 @@ func (a *FBAccount) Init() {
 	}
 	u, _ := url.Parse("https://m.facebook.com")
 	a.cl.Jar.SetCookies(u, a.Env.Cookies)
+}
+
+func handleResponseBasedErrors(resp *http.Response) ([]byte, error) {
+	respBuf := util.ReadAll(resp)
+
+	if strings.Index(string(respBuf), "checkpoint\\\\/block") > 0 {
+		err := errors.WorkerCheckpointError{}
+		rawReq, _ := httputil.DumpRequestOut(resp.Request, true)
+		rawResp, _ := httputil.DumpResponse(resp, true)
+		err.Request = rawReq
+		err.Response = rawResp
+		return nil, err
+	}
+
+	return respBuf, nil
 }
 
 func (a *FBAccount) do(req *http.Request) (*http.Response, error) {
@@ -226,7 +243,11 @@ func (a *FBAccount) GetUserInfo(user *fb.Account) error {
 		return err
 	}
 
-	responseContent := util.ReadAll(resp)
+	responseContent, err := handleResponseBasedErrors(resp)
+
+	if err != nil {
+		return err
+	}
 
 	//Getting name
 	fn := parseFullName(responseContent)
@@ -358,7 +379,11 @@ func (a *FBAccount) GetUserAlbums(user *fb.Account) ([]string, error) {
 		return nil, err
 	}
 
-	responseContent := util.ReadAll(resp)
+	responseContent, err := handleResponseBasedErrors(resp)
+
+	if err != nil {
+		return nil, err
+	}
 
 	albums := parseUserAlbumIDs(responseContent)
 
@@ -474,7 +499,13 @@ func (a *FBAccount) GetUserFriendsList(user *fb.Account, cursor string) ([]fb.Ac
 		return nil, "", err
 	}
 
-	buf := util.ReadAll(resp)
+
+	buf, err := handleResponseBasedErrors(resp)
+
+	if err != nil {
+		return nil, "", err
+	}
+
 	cb := util.ParseFromSource("unit_cursor=(.+?)&", buf)
 	cursor = ""
 	if cb != nil {
@@ -569,7 +600,14 @@ func (a *FBAccount) GetIDFromNickname(nickname string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	body := util.ReadAll(resp)
+
+
+	body, err := handleResponseBasedErrors(resp)
+
+	if err != nil {
+		return "", err
+	}
+
 	id := parseID(body)
 
 	if id == "" {
@@ -648,7 +686,12 @@ func (a *FBAccount) GetAlbumPhotosIDS(user fb.Account, album string, offset int)
 		return nil, false, err
 	}
 
-	buf := util.ReadAll(resp)
+
+	buf, err := handleResponseBasedErrors(resp)
+
+	if err != nil {
+		return nil, false, err
+	}
 
 	links := parsePhotosLinks(buf, album)
 

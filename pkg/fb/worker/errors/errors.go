@@ -58,3 +58,12 @@ type GenderUndefinedError struct {
 func(u GenderUndefinedError) Error() string {
 	return u.Stage
 }
+
+type WorkerCheckpointError struct {
+	Request		[]byte
+	Response	[]byte
+}
+
+func(u WorkerCheckpointError) Error() string {
+	return "account on checkpoint"
+}
