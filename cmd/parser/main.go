@@ -462,7 +462,7 @@ func logError(e error) {
 	defer logMux.Unlock()
 	l := func(err error, req []byte, resp []byte) {
 		errlog.Printf(
-			"[%s] ERROR: %s\nREQUEST: %s\nRESPONSE: %s\n\n____________________________________________________",
+			"[%s] ERROR: %s\nREQUEST: %s\nRESPONSE: %s\n____________________________________________________\n\n",
 			time.Now().Format(time.RFC3339),
 			err,
 			req,
@@ -562,7 +562,11 @@ func (r RecursCommand) Handle() error {
 			if err != nil {
 				logError(err)
 				logAnything("worker got critical exception. See logs")
-				if _, is := err.(errors2.WorkerCheckpointError); is {
+				switch err.(type){
+				case errors2.WorkerCheckpointError:
+					logAnything("worker got checkpoint")
+					r.WorkerService.Disable(w)
+				case errors2.BrokenLinkCheckpoint:
 					logAnything("worker got checkpoint")
 					r.WorkerService.Disable(w)
 				}
@@ -601,7 +605,12 @@ func (p PhotoFullCommand) Handle() error {
 				logError(err)
 				logAnything("worker got critical exception. See logs")
 
-				if _, is := err.(errors2.WorkerCheckpointError); is {
+				switch err.(type){
+				case errors2.WorkerCheckpointError:
+					logAnything("worker got checkpoint")
+					p.WorkerService.Disable(w)
+				case errors2.BrokenLinkCheckpoint:
+					logAnything("worker got checkpoint")
 					p.WorkerService.Disable(w)
 				}
 			}
