@@ -161,6 +161,11 @@ func (a *FBAccount) Login() error {
 	a.Env.Set("fb_dtsg_ag", string(dtsgag))
 	a.Env.Set("jazoest", jazoest(dtsgag))
 
+	dtsg := util.ParseFromSource("fb_dtsg.*?value=\\\"([^\"]+)", retBuf)
+	if dtsg != nil {
+		a.Env.Set("fb_dtsg", string(dtsg))
+	}
+
 	if locale := findLocale(retBuf); locale != "en_US" {
 		err = a.SetLocale("en_US")
 		if err != nil {
