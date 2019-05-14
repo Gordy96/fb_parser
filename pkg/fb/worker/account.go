@@ -33,14 +33,14 @@ const (
 )
 
 type FBAccount struct {
-	Email    		string        `json:"email" bson:"email"`
-	Password 		string        `json:"password" bson:"password"`
-	Proxy    		string        `json:"proxy" bson:"proxy"`
-	Env      		Env           `json:"-" bson:"env"`
-	Status   		AccountStatus `json:"status" bson:"status"`
-	RequestTimeout	int			  `json:"request_timeout" bson:"request_timeout"`
-	ReleaseTimeout	int			  `json:"release_timeout" bson:"release_timeout"`
-	cl       		http.Client   `json:"-" bson:"-"`
+	Email          string        `json:"email" bson:"email"`
+	Password       string        `json:"password" bson:"password"`
+	Proxy          string        `json:"proxy" bson:"proxy"`
+	Env            Env           `json:"-" bson:"env"`
+	Status         AccountStatus `json:"status" bson:"status"`
+	RequestTimeout int           `json:"request_timeout" bson:"request_timeout"`
+	ReleaseTimeout int           `json:"release_timeout" bson:"release_timeout"`
+	cl             http.Client   `json:"-" bson:"-"`
 }
 
 func NewFBAccount(email, password string, proxy string) *FBAccount {
@@ -161,8 +161,96 @@ func (a *FBAccount) Login() error {
 	a.Env.Set("fb_dtsg_ag", string(dtsgag))
 	a.Env.Set("jazoest", jazoest(dtsgag))
 
+	if locale := findLocale(retBuf); locale != "en_US" {
+		err = a.SetLocale("en_US")
+		if err != nil {
+			return err
+		}
+	}
+
 	a.Env.Cookies = a.cl.Jar.Cookies(u)
 
+	return nil
+}
+
+func findLocale(buf []byte) string {
+	re := regexp.MustCompile("\\/([a-z]{2}_[A-Z]{2})\\/")
+	matches := re.FindSubmatch(buf)
+	if len(matches) > 1 {
+		return string(matches[1])
+	}
+	return ""
+}
+
+func (a *FBAccount) SetLocale(locale string) error {
+	var req *http.Request
+	var resp *http.Response
+	var err error
+
+	var q url.Values
+
+	q = a.Env.MakeBody([]string{
+		"fb_dtsg",
+		"jazoest",
+		"__dyn",
+		"__req",
+		"__ajax__",
+		"__user",
+	})
+
+	q.Set("m_sess", "")
+	q.Set("should_redirect", "false")
+	q.Set("ref", "m_touch_locale_selector")
+	q.Set("__m_async_page__", "")
+	q.Set("loc", locale)
+	q.Set("jazoest", jazoest([]byte(q.Get("fb_dtsg"))))
+
+	referer := "/language.php"
+
+	r := new(bytes.Buffer)
+	encoder := json.NewEncoder(r)
+	encoder.SetEscapeHTML(false)
+	m := map[string]string{
+		"s": "m",
+		"r": referer,
+		"h": referer,
+	}
+
+	encoder.Encode(&m)
+
+	req = util.MakeRequest("POST", util.Host+"/intl/ajax/save_locale/", strings.NewReader(q.Encode()))
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+
+	req.AddCookie(&http.Cookie{
+		Name:   "x-referer",
+		Value:  base64.RawStdEncoding.EncodeToString(r.Bytes()),
+		Path:   "/",
+		Domain: ".facebook.com",
+	})
+
+	req.URL.RawQuery = q.Encode()
+	req.Header.Set("Referer", util.Host+referer)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("X-Response-Format", "JSONStream")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+
+	resp, err = a.do(req)
+
+	defer func() {
+		if resp != nil {
+			resp.Body.Close()
+		}
+	}()
+
+	if err != nil {
+		return err
+	}
+
+	_, err = handleResponseBasedErrors(resp)
+
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -506,7 +594,6 @@ func (a *FBAccount) GetUserFriendsList(user *fb.Account, cursor string) ([]fb.Ac
 		return nil, "", err
 	}
 
-
 	buf, err := handleResponseBasedErrors(resp)
 
 	if err != nil {
@@ -608,7 +695,6 @@ func (a *FBAccount) GetIDFromNickname(nickname string) (string, error) {
 		return "", err
 	}
 
-
 	body, err := handleResponseBasedErrors(resp)
 
 	if err != nil {
@@ -692,7 +778,6 @@ func (a *FBAccount) GetAlbumPhotosIDS(user fb.Account, album string, offset int)
 	if err != nil {
 		return nil, false, err
 	}
-
 
 	buf, err := handleResponseBasedErrors(resp)
 
