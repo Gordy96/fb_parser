@@ -20,6 +20,7 @@ type Account struct {
 	Hometown	primitive.ObjectID		`json:"hometown,omitempty" bson:"hometown,omitempty"`
 	CurrentCity	primitive.ObjectID		`json:"current_city,omitempty" bson:"current_city,omitempty"`
 	Gender		Gender					`json:"gender" bson:"gender"`
+	CreatedAt	int64					`json:"created_at" bson:"created_at"`
 }
 
 type Place struct {
@@ -27,6 +28,7 @@ type Place struct {
 	Name		string					`json:"name" bson:"name"`
 	Location	[2]float64				`json:"location" bson:"location"`
 	Country		string					`json:"country" bson:"country"`
+	CreatedAt	int64					`json:"created_at" bson:"created_at"`
 }
 
 type MalformedAccountError struct {

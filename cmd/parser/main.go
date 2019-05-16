@@ -52,7 +52,12 @@ func (a *AccountService) Find(id string) *fb.Account {
 func (a *AccountService) Save(account *fb.Account) (bool, error) {
 	o := &options.UpdateOptions{}
 	o.SetUpsert(true)
+	a.mux.Lock()
+	if account.CreatedAt == 0 {
+		account.CreatedAt = time.Now().Unix()
+	}
 	r, err := a.col.UpdateOne(nil, bson.M{"id": account.ID}, bson.M{"$set": account}, o)
+	a.mux.Unlock()
 	return (r.ModifiedCount + r.UpsertedCount) >= 1, err
 }
 
@@ -85,6 +90,12 @@ func (w *WorkerAccountService) FindNextRandom() (*worker.FBAccount, error) {
 	})
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
+			_, err := w.find(bson.M{
+				"status": worker.Busy,
+			})
+			if err != nil && err == mongo.ErrNoDocuments {
+				return nil, err
+			}
 			return nil, nil
 		} else {
 			return nil, err
@@ -120,6 +131,9 @@ func (w *WorkerAccountService) Save(account *worker.FBAccount) (bool, error) {
 	o := options.Update()
 	o.SetUpsert(true)
 	w.mux.Lock()
+	if account.CreatedAt == 0 {
+		account.CreatedAt = time.Now().Unix()
+	}
 	r, err := w.col.UpdateOne(nil, bson.M{"email": account.Email}, bson.M{"$set": account}, o)
 	w.mux.Unlock()
 	return (r.ModifiedCount + r.UpsertedCount) >= 1, err
@@ -251,10 +265,11 @@ func (c CountryService) GetCountryNameFromPoint(p geo.Point) (string, error) {
 }
 
 type Photo struct {
-	ID       string `json:"id" bson:"id"`
-	UserID   string `json:"user_id" bson:"user_id"`
-	AlbumID  string `json:"album_id" bson:"album_id"`
-	FullLink string `json:"full_link,omitempty" bson:"full_link,omitempty"`
+	ID       	string	`json:"id" bson:"id"`
+	UserID   	string	`json:"user_id" bson:"user_id"`
+	AlbumID  	string	`json:"album_id" bson:"album_id"`
+	FullLink 	string	`json:"full_link,omitempty" bson:"full_link,omitempty"`
+	CreatedAt	int64	`json:"created_at" bson:"created_at"`
 }
 
 type PhotoService struct {
@@ -293,6 +308,9 @@ func (p *PhotoService) Save(photo *Photo) (bool, error) {
 	defer p.mux.Unlock()
 	o := options.Update()
 	o.SetUpsert(true)
+	if photo.CreatedAt == 0 {
+		photo.CreatedAt = time.Now().Unix()
+	}
 	re, err := p.col.UpdateOne(nil, bson.M{"id": photo.ID}, bson.M{"$set": photo}, o)
 	if err != nil {
 		return false, err
@@ -556,21 +574,28 @@ func (r RecursCommand) Handle() error {
 		}
 
 		if w != nil {
+			logAnything(fmt.Sprintf("got worker %s", w.Email))
 			err = recursiveSearch(r.AccountService, r.Account, r.WorkerService, w, r.Depth, r.MaxPhotos, r.MinPhotos)
 
 			sleepMillis(w.ReleaseTimeout)
 			if err != nil {
 				logError(err)
-				logAnything("worker got critical exception. See logs")
+				logAnything(fmt.Sprintf("worker %s got critical exception. See logs", w.Email))
 				switch err.(type){
 				case errors2.WorkerCheckpointError:
-					logAnything("worker got checkpoint")
+					logAnything(fmt.Sprintf("worker %s got checkpoint", w.Email))
 					r.WorkerService.Disable(w)
+					continue
 				case errors2.BrokenLinkCheckpoint:
-					logAnything("worker got checkpoint")
+					logAnything(fmt.Sprintf("worker %s got checkpoint", w.Email))
 					r.WorkerService.Disable(w)
+					continue
 				}
+				logAnything(fmt.Sprintf("releasing worker %s", w.Email))
+				r.WorkerService.Release(w)
+				return nil
 			}
+			logAnything(fmt.Sprintf("releasing worker %s", w.Email))
 			r.WorkerService.Release(w)
 			return nil
 		}
@@ -600,22 +625,28 @@ func (p PhotoFullCommand) Handle() error {
 		}
 
 		if w != nil {
+			logAnything(fmt.Sprintf("got worker %s", w.Email))
 			fullLink, err := w.GetPhotoFull(p.Photo.ID)
 			if err != nil {
 				logError(err)
-				logAnything("worker got critical exception. See logs")
+				logAnything(fmt.Sprintf("worker %s got critical exception. See logs", w.Email))
 
 				switch err.(type){
 				case errors2.WorkerCheckpointError:
-					logAnything("worker got checkpoint")
+					logAnything(fmt.Sprintf("worker %s got checkpoint", w.Email))
 					p.WorkerService.Disable(w)
+					continue
 				case errors2.BrokenLinkCheckpoint:
-					logAnything("worker got checkpoint")
+					logAnything(fmt.Sprintf("worker %s got checkpoint", w.Email))
 					p.WorkerService.Disable(w)
+					continue
 				}
+				logAnything(fmt.Sprintf("releasing worker %s", w.Email))
+				p.WorkerService.Release(w)
 				return nil
 			}
-			_, _ = p.WorkerService.Release(w)
+			logAnything(fmt.Sprintf("releasing worker %s", w.Email))
+			p.WorkerService.Release(w)
 			p.Photo.FullLink = fullLink
 			_, err = photoService.Save(&p.Photo)
 			if err != nil {

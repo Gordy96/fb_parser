@@ -30,6 +30,7 @@ const (
 	Available AccountStatus = "available"
 	Busy      AccountStatus = "busy"
 	Error     AccountStatus = "error"
+	Resting   AccountStatus = "resting"
 )
 
 type FBAccount struct {
@@ -40,6 +41,7 @@ type FBAccount struct {
 	Status         AccountStatus `json:"status" bson:"status"`
 	RequestTimeout int           `json:"request_timeout" bson:"request_timeout"`
 	ReleaseTimeout int           `json:"release_timeout" bson:"release_timeout"`
+	CreatedAt	   int64		 `json:"created_at" bson:"created_at"`
 	cl             http.Client   `json:"-" bson:"-"`
 }
 
@@ -72,19 +74,19 @@ func (a *FBAccount) Init() {
 func handleResponseBasedErrors(resp *http.Response) ([]byte, error) {
 	respBuf := util.ReadAll(resp)
 
-	if strings.Index(string(respBuf), "checkpoint\\\\/block") > 0 {
+	if strings.Index(string(respBuf), "Just a few more steps before you log in") > 0 {
 		err := errors.WorkerCheckpointError{}
 		rawReq, _ := httputil.DumpRequestOut(resp.Request, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
 		err.Request = rawReq
-		err.Response = rawResp
+		err.Response = append(rawResp, respBuf...)
 		return nil, err
 	} else if strings.Index(string(respBuf), "link you followed may be broken, or the page may have been removed") > 0 {
 		err := errors.WorkerCheckpointError{}
 		rawReq, _ := httputil.DumpRequestOut(resp.Request, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
 		err.Request = rawReq
-		err.Response = rawResp
+		err.Response = append(rawResp, respBuf...)
 		return nil, err
 	}
 
