@@ -502,6 +502,8 @@ func logError(e error) {
 		l(err, err.Request, err.Response)
 	case errors2.BrokenLinkCheckpoint:
 		l(err, err.Request, err.Response)
+	case errors2.AuthenticationFailedError:
+		l(err, err.Request, err.Response)
 	default:
 		errlog.Printf("[%s] ERROR: %v\n", time.Now().Format(time.RFC3339), err)
 	}

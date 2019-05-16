@@ -1,7 +1,5 @@
 package errors
 
-import "net/http"
-
 type UnauthenticatedError struct {
 
 }
@@ -11,8 +9,8 @@ func(u UnauthenticatedError) Error() string {
 }
 
 type AuthenticationFailedError struct {
-	Request		*http.Request
-	Response	*http.Response
+	Request		[]byte
+	Response	[]byte
 }
 
 func(u AuthenticationFailedError) Error() string {

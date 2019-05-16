@@ -142,7 +142,9 @@ func (a *FBAccount) Login() error {
 	}(resp.Cookies())
 
 	if uid == "" {
-		return errors.AuthenticationFailedError{Request: req, Response: resp}
+		rawReq, _ := httputil.DumpRequestOut(req, true)
+		rawResp, _ := httputil.DumpResponse(resp, true)
+		return errors.AuthenticationFailedError{Request: rawReq, Response: rawResp}
 	}
 
 	a.Env.Increment()
