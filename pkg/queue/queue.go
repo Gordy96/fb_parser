@@ -21,6 +21,7 @@ type Worker struct {
 }
 
 func (w *Worker) Start() {
+	w.Running = true
 	go func() {
 		for {
 			w.pool <- w.input
@@ -74,6 +75,16 @@ func (q *Queue) Run() {
 			}
 		}
 	}()
+}
+
+func (q *Queue) RunningWorkersCount() int {
+	r := 0
+	for _, w := range q.Workers {
+		if w.Running {
+			r++
+		}
+	}
+	return r
 }
 
 func (q *Queue) Enqueue(c Command) {

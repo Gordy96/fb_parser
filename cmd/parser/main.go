@@ -71,13 +71,11 @@ func (a *AccountService) Delete(account *fb.Account) (bool, error) {
 
 func (a *AccountService) FindNextToProcess() (*fb.Account, error) {
 	r := a.col.FindOneAndUpdate(nil, bson.M{
-		"$or": bson.A{
-			bson.M{"photos_parsed": false},
-			bson.M{"friends_parsed": false},
-		},
 		"status": fb.Unprocessed,
 	}, bson.M{
-		"status": fb.Processing,
+		"$set": bson.M{
+			"status": fb.Processing,
+		},
 	})
 	b := &fb.Account{}
 
@@ -287,12 +285,21 @@ func (c CountryService) GetCountryNameFromPoint(p geo.Point) (string, error) {
 	return "", geo.InTheMiddleOfNoWhereError{Point: p}
 }
 
+type PhotoStatus string
+
+const (
+	Unprocessed PhotoStatus = "unprocessed"
+	Processing  PhotoStatus = "processing"
+	Processed   PhotoStatus = "processed"
+)
+
 type Photo struct {
-	ID        string `json:"id" bson:"id"`
-	UserID    string `json:"user_id" bson:"user_id"`
-	AlbumID   string `json:"album_id" bson:"album_id"`
-	FullLink  string `json:"full_link,omitempty" bson:"full_link,omitempty"`
-	CreatedAt int64  `json:"created_at" bson:"created_at"`
+	ID        string      `json:"id" bson:"id"`
+	UserID    string      `json:"user_id" bson:"user_id"`
+	AlbumID   string      `json:"album_id" bson:"album_id"`
+	FullLink  string      `json:"full_link,omitempty" bson:"full_link,omitempty"`
+	CreatedAt int64       `json:"created_at" bson:"created_at"`
+	Status    PhotoStatus `json:"status" bson:"status"`
 }
 
 type PhotoService struct {
@@ -319,11 +326,31 @@ func (p *PhotoService) FindByID(id string) (*Photo, error) {
 func (p *PhotoService) FindNextToDownload() (*Photo, error) {
 	p.mux.Lock()
 	defer p.mux.Unlock()
-	return p.find(bson.M{
+	r := p.col.FindOneAndUpdate(nil, bson.M{
 		"full_link": bson.M{
 			"$exists": false,
 		},
+		"$or": bson.A{
+			bson.M{
+				"status": Unprocessed,
+			},
+			bson.M{
+				"status": bson.M{
+					"$exists": false,
+				},
+			},
+		},
+	}, bson.M{
+		"$set": bson.M{
+			"status": Processing,
+		},
 	})
+	photo := &Photo{}
+	err := r.Decode(photo)
+	if err != nil {
+		return nil, err
+	}
+	return photo, nil
 }
 
 func (p *PhotoService) Save(photo *Photo) (bool, error) {
@@ -382,10 +409,6 @@ func recursiveSearch(as *AccountService, account *fb.Account, ws *WorkerAccountS
 		}
 		account.ID = id
 	}
-	persist := as.Find(account.ID)
-	if persist != nil {
-		return nil
-	}
 	err := worker.GetUserInfo(account)
 	if err != nil {
 		switch e := err.(type) {
@@ -406,41 +429,41 @@ func recursiveSearch(as *AccountService, account *fb.Account, ws *WorkerAccountS
 			switch e := err.(type) {
 			case errors2.NoAlbumsError:
 				logError(e)
-				as.Delete(account)
 			default:
 				return err
 			}
 		}
 		sleepMillis(worker.RequestTimeout)
-		for _, album := range albums {
-			var i = 0
-			photos, more, err := worker.GetAlbumPhotosIDS(*account, album, i*12)
-			if err != nil {
-				return err
-			}
-			i++
-			var temp []string
-			sleepMillis(worker.RequestTimeout)
-			for more && len(photos) < maxPhotos {
-				temp, more, err = worker.GetAlbumPhotosIDS(*account, album, i*12)
+		if len(albums) > 0 {
+			for _, album := range albums {
+				var i = 0
+				photos, more, err := worker.GetAlbumPhotosIDS(*account, album, i*12)
 				if err != nil {
 					return err
 				}
-				photos = append(photos, temp...)
 				i++
+				var temp []string
 				sleepMillis(worker.RequestTimeout)
-			}
-			if len(photos) >= minPhotos {
-				for _, id := range photos {
-					foundPhotos++
-					if !CheckSavedPhoto(account.ID, album, id) {
-						enqueuePhotoFull(ws, photoService, Photo{ID: id, AlbumID: album, UserID: account.ID})
+				for more && len(photos) < maxPhotos {
+					temp, more, err = worker.GetAlbumPhotosIDS(*account, album, i*12)
+					if err != nil {
+						return err
+					}
+					photos = append(photos, temp...)
+					i++
+					sleepMillis(worker.RequestTimeout)
+				}
+				if len(photos) >= minPhotos {
+					for _, id := range photos {
+						foundPhotos++
+						if !CheckSavedPhoto(account.ID, album, id) {
+							enqueuePhotoFull(ws, photoService, Photo{ID: id, AlbumID: album, UserID: account.ID})
+						}
 					}
 				}
 			}
+			account.PhotosParsed = true
 		}
-		account.PhotosParsed = true
-		as.Save(account)
 	}
 
 	foundFriends := 0
@@ -486,12 +509,12 @@ func recursiveSearch(as *AccountService, account *fb.Account, ws *WorkerAccountS
 						enqueueCrawl(as, friend, ws, depth-1, maxPhotos, minPhotos)
 					}
 				}(friends)
+				account.FriendsParsed = true
 			}
 		}
-		account.FriendsParsed = true
-		as.Save(account)
 	}
-
+	account.Status = fb.Processed
+	as.Save(account)
 	logAnything(fmt.Sprintf("%s[%s]: %d photos, %d freinds", account.Nickname, account.ID, foundPhotos, foundFriends))
 	return nil
 }
@@ -558,8 +581,8 @@ func (r RecursCommand) Handle() error {
 
 	acc, _ := r.AccountService.FindNextToProcess()
 	if acc == nil {
-		logAnything(fmt.Sprintf("no account to process"))
-		sleepMillis(200)
+		logAnything(fmt.Sprintf("no account to process, waiting for 2 seconds"))
+		sleepMillis(2000)
 	}
 
 	for time.Now().Sub(start) < 15*time.Minute {
@@ -615,8 +638,8 @@ func (p PhotoFullCommand) Handle() error {
 	photo, _ := p.PhotoService.FindNextToDownload()
 
 	if photo == nil {
-		logAnything("no photos to download")
-		sleepMillis(200)
+		logAnything("no photos to download, sleeping for 2 seconds")
+		sleepMillis(2000)
 		return nil
 	}
 
@@ -652,19 +675,21 @@ func (p PhotoFullCommand) Handle() error {
 			}
 			logAnything(fmt.Sprintf("releasing worker %s", w.Email))
 			p.WorkerService.Release(w)
-			photo.FullLink = fullLink
-			_, err = p.PhotoService.Save(photo)
-			if err != nil {
-				logError(err)
-				logAnything("worker stops see error log")
-				return err
+			if fullLink != "" {
+				photo.FullLink = fullLink
+				photo.Status = Processed
+				_, err = p.PhotoService.Save(photo)
+				if err != nil {
+					logError(err)
+					logAnything("worker stops see error log")
+					return err
+				}
 			}
-			//TODO: "go" this shit for the sake of performance
 			session.IncrementPhotosDownloaded()
 			go SaveFullPhoto(photo.UserID, photo.AlbumID, photo.ID, fullLink)
 			return nil
 		}
-		time.Sleep(20 * time.Millisecond)
+		sleepMillis(20)
 	}
 	logError(errors.New(fmt.Sprintf("couldn't acquire worker account saving %s/%s/%s", photo.UserID, photo.AlbumID, photo.ID)))
 	return nil
@@ -674,10 +699,12 @@ var taskQueue *queue.Queue
 var photoQueue *queue.Queue
 
 func enqueuePhotoFull(ws *WorkerAccountService, ps *PhotoService, p Photo) {
-	session.IncrementPhotoTasksAwaiting()
-
 	ps.Save(&p)
+	enqueueFullNoPhoto(ws, ps)
+}
 
+func enqueueFullNoPhoto(ws *WorkerAccountService, ps *PhotoService) {
+	session.IncrementPhotoTasksAwaiting()
 	photoQueue.Enqueue(&PhotoFullCommand{
 		WorkerService: ws,
 		PhotoService:  ps,
@@ -685,10 +712,12 @@ func enqueuePhotoFull(ws *WorkerAccountService, ps *PhotoService, p Photo) {
 }
 
 func enqueueCrawl(as *AccountService, account fb.Account, ws *WorkerAccountService, depth int, maxPhotos int, minPhotos int) {
-	session.IncrementAccountTasksAwaiting()
-
 	as.Save(&account)
+	enqueueCrawlNoAccount(as, ws, depth, maxPhotos, minPhotos)
+}
 
+func enqueueCrawlNoAccount(as *AccountService, ws *WorkerAccountService, depth int, maxPhotos int, minPhotos int) {
+	session.IncrementAccountTasksAwaiting()
 	taskQueue.Enqueue(&RecursCommand{
 		WorkerService:  ws,
 		AccountService: as,
@@ -821,16 +850,30 @@ func main() {
 
 	worker.ResolvePlace = stdResolve
 
+	taskQueue = queue.NewQueue(*accountWorkersCount)
+	taskQueue.Run()
+	photoQueue = queue.NewQueue(*photoWorkersCount)
+	photoQueue.Run()
+
 	if *crawlMode {
 		if !*fileMode {
-			for _, arg := range args {
-				var acc fb.Account
-				if isNumeric(arg) {
-					acc = fb.Account{ID: arg}
-				} else {
-					acc = fb.Account{Nickname: arg}
+			if len(args) > 0 {
+				for _, arg := range args {
+					var acc fb.Account
+					if isNumeric(arg) {
+						acc = fb.Account{ID: arg}
+					} else {
+						acc = fb.Account{Nickname: arg}
+					}
+					enqueueCrawl(&as, acc, &ws, *crawlDepth, *maxPhotos, *minPhotos)
 				}
-				enqueueCrawl(&as, acc, &ws, *crawlDepth, *maxPhotos, *minPhotos)
+			} else {
+				for i := 0; i < *accountWorkersCount; i++ {
+					enqueueCrawlNoAccount(&as, &ws, *crawlDepth, *maxPhotos, *minPhotos)
+				}
+				for i := 0; i < *photoWorkersCount; i++ {
+					enqueueFullNoPhoto(&ws, photoService)
+				}
 			}
 		}
 	} else if *workersAddMode {
@@ -856,13 +899,8 @@ func main() {
 		}
 	}
 
-	taskQueue = queue.NewQueue(*accountWorkersCount)
-	taskQueue.Run()
-	photoQueue = queue.NewQueue(*photoWorkersCount)
-	photoQueue.Run()
-
 	//waits for queues to end work
-	for session.PhotoTasksAwaiting > 0 || session.AccountTasksAwaiting > 0 {
+	for taskQueue.RunningWorkersCount() > 0 || photoQueue.RunningWorkersCount() > 0 {
 		time.Sleep(200 * time.Millisecond)
 	}
 	logAnything(session.String())
