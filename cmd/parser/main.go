@@ -112,7 +112,10 @@ func (w *WorkerAccountService) FindNextRandom() (*worker.FBAccount, error) {
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			_, err := w.find(bson.M{
-				"status": worker.Busy,
+				"$or": bson.A{
+					bson.M{"status": worker.Busy},
+					bson.M{"status": worker.Available},
+				},
 			})
 			if err != nil && err == mongo.ErrNoDocuments {
 				return nil, err
@@ -330,16 +333,7 @@ func (p *PhotoService) FindNextToDownload() (*Photo, error) {
 		"full_link": bson.M{
 			"$exists": false,
 		},
-		"$or": bson.A{
-			bson.M{
-				"status": Unprocessed,
-			},
-			bson.M{
-				"status": bson.M{
-					"$exists": false,
-				},
-			},
-		},
+		"status": Unprocessed,
 	}, bson.M{
 		"$set": bson.M{
 			"status": Processing,
@@ -579,8 +573,8 @@ func (r RecursCommand) Handle() error {
 
 	acc, _ := r.AccountService.FindNextToProcess()
 	if acc == nil {
-		logAnything(fmt.Sprintf("no account to process, waiting for 2 seconds"))
-		sleepMillis(2000)
+		logAnything(fmt.Sprintf("no account to process"))
+		return nil
 	}
 
 	for time.Now().Sub(start) < 15*time.Minute {
@@ -590,7 +584,7 @@ func (r RecursCommand) Handle() error {
 			logAnything("worker stops see error log")
 			acc.Status = fb.Unprocessed
 			r.AccountService.Save(acc)
-			return err
+			return nil
 		}
 
 		if w != nil {
@@ -646,8 +640,7 @@ func (p PhotoFullCommand) Handle() error {
 	photo, _ := p.PhotoService.FindNextToDownload()
 
 	if photo == nil {
-		logAnything("no photos to download, sleeping for 2 seconds")
-		sleepMillis(2000)
+		logAnything("no photos to download")
 		return nil
 	}
 
@@ -659,7 +652,7 @@ func (p PhotoFullCommand) Handle() error {
 			logAnything("worker stops see error log")
 			photo.Status = Unprocessed
 			p.PhotoService.Save(photo)
-			return err
+			return nil
 		}
 
 		if w != nil {
@@ -910,6 +903,16 @@ func main() {
 			}
 		}
 	}
+
+	go func() {
+		if session.PhotoTasksAwaiting == 0 {
+			enqueueFullNoPhoto(&ws, photoService)
+		}
+		if session.AccountTasksAwaiting == 0 {
+			enqueueCrawlNoAccount(&as, &ws, *crawlDepth, *minPhotos, *maxPhotos)
+		}
+		sleepMillis(5 * 1000 * 60)
+	}()
 
 	//waits for queues to end work
 	for taskQueue.RunningWorkersCount() > 0 || photoQueue.RunningWorkersCount() > 0 {
