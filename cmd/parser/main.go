@@ -513,8 +513,6 @@ func recursiveSearch(as *AccountService, account *fb.Account, ws *WorkerAccountS
 			}
 		}
 	}
-	account.Status = fb.Processed
-	as.Save(account)
 	logAnything(fmt.Sprintf("%s[%s]: %d photos, %d freinds", account.Nickname, account.ID, foundPhotos, foundFriends))
 	return nil
 }
@@ -590,6 +588,8 @@ func (r RecursCommand) Handle() error {
 		if err != nil {
 			logError(err)
 			logAnything("worker stops see error log")
+			acc.Status = fb.Unprocessed
+			r.AccountService.Save(acc)
 			return err
 		}
 
@@ -613,14 +613,22 @@ func (r RecursCommand) Handle() error {
 				}
 				logAnything(fmt.Sprintf("releasing worker %s", w.Email))
 				r.WorkerService.Release(w)
+
+				acc.Status = fb.Unprocessed
+				r.AccountService.Save(acc)
 				return nil
 			}
 			logAnything(fmt.Sprintf("releasing worker %s", w.Email))
 			r.WorkerService.Release(w)
+
+			acc.Status = fb.Processed
+			r.AccountService.Save(acc)
 			return nil
 		}
 		sleepMillis(20)
 	}
+	acc.Status = fb.Unprocessed
+	r.AccountService.Save(acc)
 	return nil
 }
 
@@ -649,6 +657,8 @@ func (p PhotoFullCommand) Handle() error {
 		if err != nil {
 			logError(err)
 			logAnything("worker stops see error log")
+			photo.Status = Unprocessed
+			p.PhotoService.Save(photo)
 			return err
 		}
 
@@ -671,6 +681,8 @@ func (p PhotoFullCommand) Handle() error {
 				}
 				logAnything(fmt.Sprintf("releasing worker %s", w.Email))
 				p.WorkerService.Release(w)
+				photo.Status = Unprocessed
+				p.PhotoService.Save(photo)
 				return nil
 			}
 			logAnything(fmt.Sprintf("releasing worker %s", w.Email))
@@ -678,19 +690,19 @@ func (p PhotoFullCommand) Handle() error {
 			if fullLink != "" {
 				photo.FullLink = fullLink
 				photo.Status = Processed
-				_, err = p.PhotoService.Save(photo)
-				if err != nil {
-					logError(err)
-					logAnything("worker stops see error log")
-					return err
-				}
+				p.PhotoService.Save(photo)
+				session.IncrementPhotosDownloaded()
+				go SaveFullPhoto(photo.UserID, photo.AlbumID, photo.ID, fullLink)
+			} else {
+				photo.Status = Unprocessed
+				p.PhotoService.Save(photo)
 			}
-			session.IncrementPhotosDownloaded()
-			go SaveFullPhoto(photo.UserID, photo.AlbumID, photo.ID, fullLink)
 			return nil
 		}
 		sleepMillis(20)
 	}
+	photo.Status = Unprocessed
+	p.PhotoService.Save(photo)
 	logError(errors.New(fmt.Sprintf("couldn't acquire worker account saving %s/%s/%s", photo.UserID, photo.AlbumID, photo.ID)))
 	return nil
 }
