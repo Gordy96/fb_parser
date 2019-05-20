@@ -587,7 +587,7 @@ func (r RecursCommand) Handle() error {
 			logAnything("worker stops see error log")
 			acc.Status = fb.Unprocessed
 			r.AccountService.Save(acc)
-			return nil
+			return err
 		}
 
 		if w != nil {
