@@ -589,6 +589,7 @@ func (r RecursCommand) Handle() error {
 
 		if w != nil {
 			logAnything(fmt.Sprintf("got worker %s", w.Email))
+			w.Init()
 			err = recursiveSearch(r.AccountService, acc, r.WorkerService, w, r.Depth, r.MaxPhotos, r.MinPhotos)
 
 			sleepMillis(w.ReleaseTimeout)
@@ -657,6 +658,7 @@ func (p PhotoFullCommand) Handle() error {
 
 		if w != nil {
 			logAnything(fmt.Sprintf("got worker %s", w.Email))
+			w.Init()
 			fullLink, err := w.GetPhotoFull(photo.ID)
 			if err != nil {
 				logError(err)
