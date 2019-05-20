@@ -858,6 +858,10 @@ func main() {
 	worker.ResolvePlace = stdResolve
 
 	if *crawlMode {
+		taskQueue = queue.NewQueue(*accountWorkersCount)
+		taskQueue.Run()
+		photoQueue = queue.NewQueue(*photoWorkersCount)
+		photoQueue.Run()
 		if !*fileMode {
 			if len(args) > 0 {
 				for _, arg := range args {
@@ -878,14 +882,6 @@ func main() {
 				}
 			}
 		}
-
-
-
-		taskQueue = queue.NewQueue(*accountWorkersCount)
-		taskQueue.Run()
-		photoQueue = queue.NewQueue(*photoWorkersCount)
-		photoQueue.Run()
-
 	} else if *workersAddMode {
 		if !*fileMode {
 			vrx := regexp.MustCompile("([^:]+):([^|]+)(?:\\|((?:(?:(?:https?)|(?:socks(?:4|5))):\\/\\/)?(?:(.+?):(.+?)@)?(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?):[0-9]{2,5}))?")
