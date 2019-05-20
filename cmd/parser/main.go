@@ -355,6 +355,9 @@ func (p *PhotoService) Save(photo *Photo) (bool, error) {
 	if photo.CreatedAt == 0 {
 		photo.CreatedAt = time.Now().Unix()
 	}
+	if photo.Status == "" {
+		photo.Status = Unprocessed
+	}
 	re, err := p.col.UpdateOne(nil, bson.M{"id": photo.ID}, bson.M{"$set": photo}, o)
 	if err != nil {
 		return false, err
