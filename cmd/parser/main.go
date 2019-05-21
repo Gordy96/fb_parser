@@ -574,6 +574,10 @@ func (r RecursCommand) Handle() error {
 		session.IncrementAccountTasksDone()
 	}()
 
+	for photoQueue.Enqueued > 10 {
+		sleepMillis(500)
+	}
+
 	acc, _ := r.AccountService.FindNextToProcess()
 	if acc == nil {
 		logAnything(fmt.Sprintf("no account to process"))
