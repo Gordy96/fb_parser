@@ -596,7 +596,7 @@ func (r RecursCommand) Handle() error {
 		}
 
 		if w != nil {
-			logAnything(fmt.Sprintf("got worker %s", w.Email))
+			//logAnything(fmt.Sprintf("got worker %s", w.Email))
 			w.Init()
 			err = recursiveSearch(r.AccountService, acc, r.WorkerService, w, r.Depth, r.MaxPhotos, r.MinPhotos)
 
@@ -614,14 +614,14 @@ func (r RecursCommand) Handle() error {
 					r.WorkerService.Disable(w)
 					continue
 				}
-				logAnything(fmt.Sprintf("releasing worker %s", w.Email))
+				//logAnything(fmt.Sprintf("releasing worker %s", w.Email))
 				r.WorkerService.Release(w)
 
 				acc.Status = fb.Unprocessed
 				r.AccountService.Save(acc)
 				return nil
 			}
-			logAnything(fmt.Sprintf("releasing worker %s", w.Email))
+			//logAnything(fmt.Sprintf("releasing worker %s", w.Email))
 			r.WorkerService.Release(w)
 
 			acc.Status = fb.Processed
@@ -665,7 +665,7 @@ func (p PhotoFullCommand) Handle() error {
 		}
 
 		if w != nil {
-			logAnything(fmt.Sprintf("got worker %s", w.Email))
+			//logAnything(fmt.Sprintf("got worker %s", w.Email))
 			w.Init()
 			fullLink, err := w.GetPhotoFull(photo.ID)
 			if err != nil {
@@ -682,13 +682,13 @@ func (p PhotoFullCommand) Handle() error {
 					p.WorkerService.Disable(w)
 					continue
 				}
-				logAnything(fmt.Sprintf("releasing worker %s", w.Email))
+				//logAnything(fmt.Sprintf("releasing worker %s", w.Email))
 				p.WorkerService.Release(w)
 				photo.Status = Unprocessed
 				p.PhotoService.Save(photo)
 				return nil
 			}
-			logAnything(fmt.Sprintf("releasing worker %s", w.Email))
+			//logAnything(fmt.Sprintf("releasing worker %s", w.Email))
 			p.WorkerService.Release(w)
 			if fullLink != "" {
 				photo.FullLink = fullLink
