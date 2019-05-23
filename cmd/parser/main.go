@@ -915,19 +915,21 @@ func main() {
 		}
 	}
 
-	go func() {
-		if session.PhotoTasksAwaiting == 0 {
-			enqueueFullNoPhoto(&ws, photoService)
-		}
-		if session.AccountTasksAwaiting == 0 {
-			enqueueCrawlNoAccount(&as, &ws, *crawlDepth, *minPhotos, *maxPhotos)
-		}
-		sleepMillis(5 * 1000 * 60)
-	}()
+	if photoQueue != nil && taskQueue != nil {
+		go func() {
+			if session.PhotoTasksAwaiting == 0 {
+				enqueueFullNoPhoto(&ws, photoService)
+			}
+			if session.AccountTasksAwaiting == 0 {
+				enqueueCrawlNoAccount(&as, &ws, *crawlDepth, *minPhotos, *maxPhotos)
+			}
+			sleepMillis(5 * 1000 * 60)
+		}()
 
-	//waits for queues to end work
-	for taskQueue.RunningWorkersCount() > 0 || photoQueue.RunningWorkersCount() > 0 {
-		time.Sleep(200 * time.Millisecond)
+		//waits for queues to end work
+		for taskQueue.RunningWorkersCount() > 0 || photoQueue.RunningWorkersCount() > 0 {
+			time.Sleep(200 * time.Millisecond)
+		}
 	}
 	logAnything(session.String())
 	logAnything("program exited")
