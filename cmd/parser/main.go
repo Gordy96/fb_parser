@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 	"unicode"
@@ -746,8 +747,10 @@ var cs *CountryService
 var photoService *PhotoService
 
 func stdResolve(s string) *fb.Place {
-	decoded := ""
-	json.Unmarshal([]byte("\""+s+"\""), &decoded)
+	decoded := s
+	for strings.Contains(decoded, "\\") {
+		json.Unmarshal([]byte("\""+decoded+"\""), &decoded)
+	}
 	place, err := ps.FindByNameOrCreate(decoded, func(place *fb.Place) {
 		//TODO: "go" this shit for the sake of performance
 		go func(place *fb.Place) {

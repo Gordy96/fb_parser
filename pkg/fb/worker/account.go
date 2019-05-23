@@ -41,7 +41,7 @@ type FBAccount struct {
 	Status         AccountStatus `json:"status" bson:"status"`
 	RequestTimeout int           `json:"request_timeout" bson:"request_timeout"`
 	ReleaseTimeout int           `json:"release_timeout" bson:"release_timeout"`
-	CreatedAt	   int64		 `json:"created_at" bson:"created_at"`
+	CreatedAt      int64         `json:"created_at" bson:"created_at"`
 	cl             http.Client   `json:"-" bson:"-"`
 }
 
@@ -963,7 +963,11 @@ func parseFullName(source []byte) string {
 	fnRe := regexp.MustCompile("\\\\\\\"setTitle\\\\\\\",\\[\\],\\[\\\\\\\"(.*?)\\\\\\\"\\]\\]")
 	gr := fnRe.FindSubmatch(source)
 	if len(gr) > 1 {
-		return string(gr[1])
+		str := string(gr[1])
+		for strings.Contains(str, "\\") {
+			json.Unmarshal([]byte("\""+str+"\""), &str)
+		}
+		return str
 	} else {
 		return ""
 	}
