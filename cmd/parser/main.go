@@ -383,10 +383,11 @@ func SaveFullPhoto(userId string, albumId string, photoId string, link string) {
 }
 
 func CheckSavedPhoto(userId string, albumId string, photoId string) bool {
-	_, err := os.Open(fmt.Sprintf("./storage/%s/%s_%s.jpg", userId, albumId, photoId))
+	f, err := os.Open(fmt.Sprintf("./storage/%s/%s_%s.jpg", userId, albumId, photoId))
 	if err != nil {
 		return false
 	}
+	f.Close()
 	return true
 }
 
@@ -695,7 +696,8 @@ func (p PhotoFullCommand) Handle() error {
 				photo.Status = Processed
 				p.PhotoService.Save(photo)
 				session.IncrementPhotosDownloaded()
-				go SaveFullPhoto(photo.UserID, photo.AlbumID, photo.ID, fullLink)
+				//Removed parallelism so no "too many files" exception raised
+				SaveFullPhoto(photo.UserID, photo.AlbumID, photo.ID, fullLink)
 			} else {
 				photo.Status = Unprocessed
 				p.PhotoService.Save(photo)
