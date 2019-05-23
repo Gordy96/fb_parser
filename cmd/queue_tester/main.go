@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/gordy96/fb_parser/pkg/queue"
+	"os"
+	"strconv"
+	"sync"
 	"time"
 )
 
@@ -29,6 +32,24 @@ func (c *C2) Handle() error {
 }
 
 func main() {
+	wg := sync.WaitGroup{}
+	wg.Add(10000)
+	for i := 0; i < 10000; i++ {
+		go func(w *sync.WaitGroup) {
+			now := time.Now().UnixNano()
+			f, err := os.OpenFile(fmt.Sprintf("./storage/%d.txt", now), os.O_CREATE|os.O_WRONLY, 0777)
+			if err != nil {
+				panic(err)
+			}
+
+			f.WriteString(strconv.FormatInt(now, 10))
+			fmt.Printf("%d\n", now)
+			f.Close()
+			w.Done()
+		}(&wg)
+	}
+	wg.Wait()
+	return
 	q1 = queue.NewQueue(10)
 	q2 = queue.NewQueue(10)
 

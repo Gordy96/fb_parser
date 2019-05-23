@@ -368,18 +368,18 @@ func (p *PhotoService) Save(photo *Photo) (bool, error) {
 
 func SaveFullPhoto(userId string, albumId string, photoId string, link string) {
 	os.MkdirAll(fmt.Sprintf("./storage/%s", userId), 0777)
-	f, err := os.OpenFile(fmt.Sprintf("./storage/%s/%s_%s.jpg", userId, albumId, photoId), os.O_WRONLY|os.O_CREATE, 0777)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-
 	resp, err := http.Get(link)
 	if err != nil {
 		panic(err)
 	}
 	content := util.ReadAll(resp)
+
+	f, err := os.OpenFile(fmt.Sprintf("./storage/%s/%s_%s.jpg", userId, albumId, photoId), os.O_WRONLY|os.O_CREATE, 0777)
+	if err != nil {
+		panic(err)
+	}
 	f.Write(content)
+	f.Close()
 }
 
 func CheckSavedPhoto(userId string, albumId string, photoId string) bool {
