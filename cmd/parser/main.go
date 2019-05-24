@@ -381,6 +381,7 @@ func SaveFullPhoto(userId string, albumId string, photoId string, link string) {
 	f, err = os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0777)
 	if err != nil {
 		for err != nil {
+			sleepMillis(100)
 			f, err = os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0777)
 			f.Write(content)
 			f.Close()
@@ -703,7 +704,7 @@ func (p PhotoFullCommand) Handle() error {
 				p.PhotoService.Save(photo)
 				session.IncrementPhotosDownloaded()
 				//Removed parallelism so no "too many files" exception raised
-				SaveFullPhoto(photo.UserID, photo.AlbumID, photo.ID, fullLink)
+				go SaveFullPhoto(photo.UserID, photo.AlbumID, photo.ID, fullLink)
 			} else {
 				photo.Status = Unprocessed
 				p.PhotoService.Save(photo)

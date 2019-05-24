@@ -74,7 +74,9 @@ func (a *FBAccount) Init() {
 func handleResponseBasedErrors(resp *http.Response) ([]byte, error) {
 	respBuf := util.ReadAll(resp)
 
-	if strings.Index(string(respBuf), "Just a few more steps before you log in") > 0 || strings.Index(string(respBuf), "MCheckpointRedirect") > 0 {
+	if strings.Index(string(respBuf), "Just a few more steps before you log in") > 0 ||
+		strings.Index(string(respBuf), "MCheckpointRedirect") > 0 ||
+		strings.Index(string(respBuf), "Content Not Found") > 0 {
 		err := errors.WorkerCheckpointError{}
 		rawReq, _ := httputil.DumpRequestOut(resp.Request, true)
 		rawResp, _ := httputil.DumpResponse(resp, true)
@@ -95,7 +97,7 @@ func handleResponseBasedErrors(resp *http.Response) ([]byte, error) {
 
 func (a *FBAccount) do(req *http.Request) (*http.Response, error) {
 	resp, err := a.cl.Do(req)
-
+	req.Close = true
 	return resp, err
 }
 

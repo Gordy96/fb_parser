@@ -2,20 +2,20 @@ package google
 
 import (
 	"bytes"
-	"github.com/gordy96/fb_parser/pkg/geo"
 	"github.com/gordy96/fb_parser/pkg/fb/util"
+	"github.com/gordy96/fb_parser/pkg/geo"
+	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"regexp"
 	"strconv"
-	"io/ioutil"
-	"net/http/httputil"
 )
 
 type CannotParseError struct {
-	Query		string
-	Request		[]byte
-	Response	[]byte
+	Query    string
+	Request  []byte
+	Response []byte
 }
 
 func (c CannotParseError) Error() string {
@@ -34,17 +34,18 @@ func (m MapsHttp) FindByName(name string) (geo.Point, error) {
 	q.Set("hl", "en")
 	q.Set("query", name)
 	req.URL.RawQuery = q.Encode()
+	req.Header.Set("Connection", "close")
 	var cl http.Client
 	if ProxyString != "" {
 		proxyUrl, _ := url.Parse(ProxyString)
 		cl = http.Client{
-			Transport:&http.Transport{
+			Transport: &http.Transport{
 				Proxy: http.ProxyURL(proxyUrl),
 			},
 		}
 	}
 	resp, err := cl.Do(req)
-
+	req.Close = true
 	defer func() {
 		if resp != nil {
 			resp.Body.Close()

@@ -16,6 +16,7 @@ func MakeRequest(method string, uri string, body io.Reader) *http.Request {
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-GB,en-US;q=0.9,en;q=0.8")
 	req.Header.Set("Accept-Encoding", "deflate")
+	req.Header.Set("Connection", "close")
 	return req
 }
 
@@ -71,11 +72,11 @@ func getCookie(name string, source []byte, resp *http.Response) *http.Cookie {
 	tm := time.Unix(i, 0)
 
 	return &http.Cookie{
-		Name: name,
-		Value: string(parts[1]),
-		Path: "/",
+		Name:    name,
+		Value:   string(parts[1]),
+		Path:    "/",
 		Expires: tm,
-		Domain: ".facebook.com",
+		Domain:  ".facebook.com",
 	}
 }
 
