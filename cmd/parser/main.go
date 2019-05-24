@@ -373,14 +373,13 @@ func SaveFullPhoto(userId string, albumId string, photoId string, link string) {
 		panic(err)
 	}
 	content := util.ReadAll(resp)
-
+	resp.Body.Close()
 	f, err := os.OpenFile(fmt.Sprintf("./storage/%s/%s_%s.jpg", userId, albumId, photoId), os.O_WRONLY|os.O_CREATE, 0777)
 	if err != nil {
 		panic(err)
 	}
 	f.Write(content)
 	f.Close()
-	resp.Body.Close()
 }
 
 func CheckSavedPhoto(userId string, albumId string, photoId string) bool {
