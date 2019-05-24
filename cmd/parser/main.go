@@ -380,6 +380,7 @@ func SaveFullPhoto(userId string, albumId string, photoId string, link string) {
 	}
 	f.Write(content)
 	f.Close()
+	resp.Body.Close()
 }
 
 func CheckSavedPhoto(userId string, albumId string, photoId string) bool {

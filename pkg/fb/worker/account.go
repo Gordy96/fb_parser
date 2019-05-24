@@ -632,6 +632,7 @@ func (a *FBAccount) GetUserFriendsList(user *fb.Account, cursor string) ([]fb.Ac
 			Request:  rawReq,
 			Response: rawResp,
 		}
+		resp.Body.Close()
 		return nil, "", err
 	}
 
@@ -722,6 +723,7 @@ func (a *FBAccount) GetIDFromNickname(nickname string) (string, error) {
 			Request:  rawReq,
 			Response: rawResp,
 		}
+		resp.Body.Close()
 		return "", err
 	}
 
@@ -806,6 +808,7 @@ func (a *FBAccount) GetAlbumPhotosIDS(user fb.Account, album string, offset int)
 			Request:  rawReq,
 			Response: rawResp,
 		}
+		resp.Body.Close()
 		return nil, false, err
 	}
 
@@ -856,6 +859,7 @@ func (a *FBAccount) GetPhotoFull(id string) (string, error) {
 			Request:  rawReq,
 			Response: rawResp,
 		}
+		resp.Body.Close()
 		return "", err
 	}
 
