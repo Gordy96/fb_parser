@@ -846,8 +846,12 @@ func (a *FBAccount) GetPhotoFull(id string) (string, error) {
 		return "", err
 	}
 
-	buf := util.ReadAll(resp)
+	buf, err := handleResponseBasedErrors(resp)
 	var l string = ""
+
+	if err != nil {
+		return l, err
+	}
 
 	link := parsePhotoFullLink(buf)
 
