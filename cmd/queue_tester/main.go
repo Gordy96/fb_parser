@@ -33,8 +33,8 @@ func (c *C2) Handle() error {
 
 func main() {
 	wg := sync.WaitGroup{}
-	wg.Add(10000)
-	for i := 0; i < 10000; i++ {
+	wg.Add(100000)
+	for i := 0; i < 100000; i++ {
 		go func(w *sync.WaitGroup) {
 			now := time.Now().UnixNano()
 			f, err := os.OpenFile(fmt.Sprintf("./storage/%d.txt", now), os.O_CREATE|os.O_WRONLY, 0777)
