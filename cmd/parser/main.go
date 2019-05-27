@@ -264,13 +264,15 @@ type CountryService struct {
 func (c CountryService) GetCountryNameFromPoint(p geo.Point) (string, error) {
 	o := options.FindOne()
 	o.Projection = bson.M{"properties.iso_a3": 1}
+
 	r := c.col.FindOne(nil, bson.M{
 		"geometry": bson.M{
-			"$geoIntersects": bson.M{
+			"$nearSphere": bson.M{
 				"$geometry": bson.M{
 					"type":        "Point",
 					"coordinates": []float64{p.X, p.Y},
 				},
+				"$maxDistance": 1000,
 			},
 		},
 	})
