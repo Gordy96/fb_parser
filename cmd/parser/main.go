@@ -297,6 +297,7 @@ const (
 	Unprocessed PhotoStatus = "unprocessed"
 	Processing  PhotoStatus = "processing"
 	Processed   PhotoStatus = "processed"
+	Error		PhotoStatus	= "error"
 )
 
 type Photo struct {
