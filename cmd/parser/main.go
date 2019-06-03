@@ -332,6 +332,10 @@ func (p *PhotoService) FindByID(id string) (*Photo, error) {
 func (p *PhotoService) FindNextToDownload() (*Photo, error) {
 	p.mux.Lock()
 	defer p.mux.Unlock()
+	o := options.FindOneAndUpdate()
+	o.SetSort(bson.M{
+		"_id": -1,
+	})
 	r := p.col.FindOneAndUpdate(nil, bson.M{
 		"full_link": bson.M{
 			"$exists": false,
@@ -341,7 +345,7 @@ func (p *PhotoService) FindNextToDownload() (*Photo, error) {
 		"$set": bson.M{
 			"status": Processing,
 		},
-	})
+	}, o)
 	photo := &Photo{}
 	err := r.Decode(photo)
 	if err != nil {
