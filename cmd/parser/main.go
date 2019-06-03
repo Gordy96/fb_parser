@@ -699,7 +699,7 @@ func (p PhotoFullCommand) Handle() error {
 				}
 				//logAnything(fmt.Sprintf("releasing worker %s", w.Email))
 				p.WorkerService.Release(w)
-				photo.Status = Unprocessed
+				photo.Status = Error
 				p.PhotoService.Save(photo)
 				return nil
 			}
