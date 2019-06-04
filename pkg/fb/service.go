@@ -20,7 +20,7 @@ type AccountService struct {
 	mux sync.Mutex
 }
 
-func (a *AccountService) Find(id string) *Account {
+func (a *AccountService) Find(id string) (*Account, error) {
 	r := a.col.FindOne(nil, bson.M{
 		"id": id,
 	})
@@ -29,9 +29,9 @@ func (a *AccountService) Find(id string) *Account {
 	e := r.Decode(b)
 
 	if e != nil {
-		return nil
+		return nil, e
 	}
-	return b
+	return b, nil
 }
 
 func (a *AccountService) Save(account *Account) (bool, error) {

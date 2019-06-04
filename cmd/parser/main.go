@@ -8,22 +8,22 @@ import (
 	"github.com/gordy96/fb_parser/pkg/fb"
 	"github.com/gordy96/fb_parser/pkg/fb/photo"
 	"github.com/gordy96/fb_parser/pkg/fb/place"
-	"github.com/gordy96/fb_parser/pkg/fb/util"
 	"github.com/gordy96/fb_parser/pkg/fb/worker"
 	errors2 "github.com/gordy96/fb_parser/pkg/fb/worker/errors"
 	"github.com/gordy96/fb_parser/pkg/geo"
 	"github.com/gordy96/fb_parser/pkg/geo/google"
+	"github.com/gordy96/fb_parser/pkg/logging"
 	"github.com/gordy96/fb_parser/pkg/queue"
+	sessionPkg "github.com/gordy96/fb_parser/pkg/session"
+	"github.com/gordy96/fb_parser/pkg/tasks"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/x/network/connstring"
 	"log"
-	"net/http"
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 )
@@ -66,29 +66,6 @@ func (c CountryService) GetCountryNameFromPoint(p geo.Point) (string, error) {
 	return "", geo.InTheMiddleOfNoWhereError{Point: p}
 }
 
-func SaveFullPhoto(userId string, albumId string, photoId string, link string) {
-	os.MkdirAll(fmt.Sprintf("./storage/%s", userId), 0777)
-	var err error
-	var resp *http.Response
-	resp, err = http.Get(link)
-	if err != nil {
-		panic(err)
-	}
-	content := util.ReadAll(resp)
-	resp.Body.Close()
-	var f *os.File
-	fileName := fmt.Sprintf("./storage/%s/%s_%s.jpg", userId, albumId, photoId)
-	f, err = os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0777)
-	if err != nil {
-		for err != nil {
-			sleepMillis(100)
-			f, err = os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0777)
-			f.Write(content)
-			f.Close()
-		}
-	}
-}
-
 func CheckSavedPhoto(userId string, albumId string, photoId string) bool {
 	f, err := os.Open(fmt.Sprintf("./storage/%s/%s_%s.jpg", userId, albumId, photoId))
 	if err != nil {
@@ -119,7 +96,7 @@ func recursiveSearch(as *fb.AccountService, account *fb.Account, ws *worker.Acco
 	if err != nil {
 		switch e := err.(type) {
 		case errors2.GenderUndefinedError:
-			logError(e)
+			logging.LogError(e)
 			//as.Delete(&account)
 		default:
 			return err
@@ -134,7 +111,7 @@ func recursiveSearch(as *fb.AccountService, account *fb.Account, ws *worker.Acco
 		if err != nil {
 			switch e := err.(type) {
 			case errors2.NoAlbumsError:
-				logError(e)
+				logging.LogError(e)
 			default:
 				return err
 			}
@@ -179,7 +156,7 @@ func recursiveSearch(as *fb.AccountService, account *fb.Account, ws *worker.Acco
 			if err != nil {
 				switch e := err.(type) {
 				case errors2.NoFriendsError:
-					logError(e)
+					logging.LogError(e)
 					return nil
 				default:
 					return err
@@ -219,53 +196,10 @@ func recursiveSearch(as *fb.AccountService, account *fb.Account, ws *worker.Acco
 			}
 		}
 	}
-	logAnything(fmt.Sprintf("%s[%s]: %d photos, %d freinds", account.Nickname, account.ID, foundPhotos, foundFriends))
+	logging.LogAnything(fmt.Sprintf("%s[%s]: %d photos, %d freinds", account.Nickname, account.ID, foundPhotos, foundFriends))
 	return nil
 }
 
-var logMux = sync.Mutex{}
-var errlog *log.Logger = log.New(os.Stderr, "", 0)
-var logger *log.Logger = log.New(os.Stdout, "", 0)
-
-func logError(e error) {
-	logMux.Lock()
-	defer logMux.Unlock()
-	l := func(err error, req []byte, resp []byte) {
-		errlog.Printf(
-			"[%s] ERROR: %s\nREQUEST: %s\nRESPONSE: %s\n____________________________________________________\n\n",
-			time.Now().Format(time.RFC3339),
-			err,
-			req,
-			resp,
-		)
-	}
-	switch err := e.(type) {
-	case google.CannotParseError:
-		l(err, err.Request, err.Response)
-	case errors2.ParsingError:
-		l(err, err.Request, err.Response)
-	case errors2.NoFriendsError:
-		l(err, err.Request, err.Response)
-	case errors2.NoAlbumsError:
-		l(err, err.Request, err.Response)
-	case errors2.GenderUndefinedError:
-		l(err, err.Request, err.Response)
-	case errors2.WorkerCheckpointError:
-		l(err, err.Request, err.Response)
-	case errors2.BrokenLinkCheckpoint:
-		l(err, err.Request, err.Response)
-	case errors2.AuthenticationFailedError:
-		l(err, err.Request, err.Response)
-	default:
-		errlog.Printf("[%s] ERROR: %v\n", time.Now().Format(time.RFC3339), err)
-	}
-}
-
-func logAnything(v interface{}) {
-	logMux.Lock()
-	defer logMux.Unlock()
-	logger.Printf("[%s] INFO: %v\n", time.Now().Format(time.RFC3339), v)
-}
 
 type RecursCommand struct {
 	WorkerService  *worker.AccountService
@@ -289,15 +223,15 @@ func (r RecursCommand) Handle() error {
 
 	acc, _ := r.AccountService.FindNextToProcess()
 	if acc == nil {
-		logAnything(fmt.Sprintf("no account to process"))
+		logging.LogAnything(fmt.Sprintf("no account to process"))
 		return nil
 	}
 
 	for time.Now().Sub(start) < 15*time.Minute {
 		w, err := r.WorkerService.FindNextRandom()
 		if err != nil {
-			logError(err)
-			logAnything("worker stops see error log")
+			logging.LogError(err)
+			logging.LogAnything("worker stops see error log")
 			acc.Status = fb.Unprocessed
 			r.AccountService.Save(acc)
 			return err
@@ -310,15 +244,15 @@ func (r RecursCommand) Handle() error {
 
 			sleepMillis(w.ReleaseTimeout)
 			if err != nil {
-				logError(err)
-				logAnything(fmt.Sprintf("worker %s got critical exception. See logs", w.Email))
+				logging.LogError(err)
+				logging.LogAnything(fmt.Sprintf("worker %s got critical exception. See logs", w.Email))
 				switch err.(type) {
 				case errors2.WorkerCheckpointError:
-					logAnything(fmt.Sprintf("worker %s got checkpoint", w.Email))
+					logging.LogAnything(fmt.Sprintf("worker %s got checkpoint", w.Email))
 					r.WorkerService.Disable(w)
 					continue
 				case errors2.BrokenLinkCheckpoint:
-					logAnything(fmt.Sprintf("worker %s got checkpoint", w.Email))
+					logging.LogAnything(fmt.Sprintf("worker %s got checkpoint", w.Email))
 					r.WorkerService.Disable(w)
 					continue
 				}
@@ -343,81 +277,7 @@ func (r RecursCommand) Handle() error {
 	return nil
 }
 
-type PhotoFullCommand struct {
-	WorkerService *worker.AccountService
-	PhotoService  *photo.Service
-}
 
-func (p PhotoFullCommand) Handle() error {
-	defer func() {
-		session.DecrementPhotoTasksAwaiting()
-		session.IncrementPhotoTasksDone()
-	}()
-
-	ph, _ := p.PhotoService.FindNextToDownload()
-
-	if ph == nil {
-		logAnything("no photos to download")
-		return nil
-	}
-
-	start := time.Now()
-	for time.Now().Sub(start) < 15*time.Minute {
-		w, err := p.WorkerService.FindNextRandom()
-		if err != nil {
-			logError(err)
-			logAnything("worker stops see error log")
-			ph.Status = photo.Unprocessed
-			p.PhotoService.Save(ph)
-			return nil
-		}
-
-		if w != nil {
-			//logAnything(fmt.Sprintf("got worker %s", w.Email))
-			w.Init()
-			fullLink, err := w.GetPhotoFull(ph.ID)
-			if err != nil {
-				logError(err)
-				logAnything(fmt.Sprintf("worker %s got critical exception. See logs", w.Email))
-
-				switch err.(type) {
-				case errors2.WorkerCheckpointError:
-					logAnything(fmt.Sprintf("worker %s got checkpoint", w.Email))
-					p.WorkerService.Disable(w)
-					continue
-				case errors2.BrokenLinkCheckpoint:
-					logAnything(fmt.Sprintf("worker %s got checkpoint", w.Email))
-					p.WorkerService.Disable(w)
-					continue
-				}
-				//logAnything(fmt.Sprintf("releasing worker %s", w.Email))
-				p.WorkerService.Release(w)
-				ph.Status = photo.Error
-				p.PhotoService.Save(ph)
-				return nil
-			}
-			//logAnything(fmt.Sprintf("releasing worker %s", w.Email))
-			p.WorkerService.Release(w)
-			if fullLink != "" {
-				ph.FullLink = fullLink
-				ph.Status = photo.Processed
-				p.PhotoService.Save(ph)
-				session.IncrementPhotosDownloaded()
-				//Removed parallelism so no "too many files" exception raised
-				go SaveFullPhoto(ph.UserID, ph.AlbumID, ph.ID, fullLink)
-			} else {
-				ph.Status = photo.Unprocessed
-				p.PhotoService.Save(ph)
-			}
-			return nil
-		}
-		sleepMillis(20)
-	}
-	ph.Status = photo.Unprocessed
-	p.PhotoService.Save(ph)
-	logError(errors.New(fmt.Sprintf("couldn't acquire worker account saving %s/%s/%s", ph.UserID, ph.AlbumID, ph.ID)))
-	return nil
-}
 
 var taskQueue *queue.Queue
 var photoQueue *queue.Queue
@@ -429,7 +289,7 @@ func enqueuePhotoFull(ws *worker.AccountService, ps *photo.Service, p photo.Phot
 
 func enqueueFullNoPhoto(ws *worker.AccountService, ps *photo.Service) {
 	session.IncrementPhotoTasksAwaiting()
-	photoQueue.Enqueue(&PhotoFullCommand{
+	photoQueue.Enqueue(&tasks.PhotoFullCommand{
 		WorkerService: ws,
 		PhotoService:  ps,
 	})
@@ -466,19 +326,19 @@ func stdResolve(s string) *place.Place {
 			gm := google.MapsHttp{}
 			coords, err := gm.FindByName(p.Name)
 			if err != nil {
-				logError(err)
+				logging.LogError(err)
 			}
 			p.Location[0] = coords.X
 			p.Location[1] = coords.Y
 			p.Country, err = cs.GetCountryNameFromPoint(coords)
 			if err != nil {
-				logError(err)
+				logging.LogError(err)
 			}
 			ps.Save(p)
 		}(p)
 	})
 	if err != nil {
-		logError(err)
+		logging.LogError(err)
 	}
 	return pl
 }
@@ -545,7 +405,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		errlog = log.New(f, "", 0)
+		logging.Errlog = log.New(f, "", 0)
 		defer f.Close()
 	}
 
@@ -554,14 +414,14 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		logger = log.New(f, "", 0)
+		logging.Logger = log.New(f, "", 0)
 		defer f.Close()
 	}
 
 	if *sessionLog {
 		go func() {
 			for {
-				logAnything(session.String())
+				logging.LogAnything(session.String())
 				time.Sleep(5 * time.Second)
 			}
 		}()
@@ -613,10 +473,10 @@ func main() {
 					wrk := worker.NewFBAccount(email, password, proxy)
 					err = wrk.Login()
 					if err != nil {
-						logError(err)
-						logAnything(fmt.Sprintf("error occured on adding %s (see error log)", wrk.Email))
+						logging.LogError(err)
+						logging.LogAnything(fmt.Sprintf("error occured on adding %s (see error log)", wrk.Email))
 					} else {
-						logAnything(fmt.Sprintf("found and saved %s", wrk.Email))
+						logging.LogAnything(fmt.Sprintf("found and saved %s", wrk.Email))
 						ws.Save(wrk)
 					}
 				}
@@ -640,8 +500,8 @@ func main() {
 			time.Sleep(200 * time.Millisecond)
 		}
 	}
-	logAnything(session.String())
-	logAnything("program exited")
+	logging.LogAnything(session.String())
+	logging.LogAnything("program exited")
 }
 
 func isNumeric(s string) bool {
@@ -653,88 +513,4 @@ func isNumeric(s string) bool {
 	return true
 }
 
-type SessionStatistics struct {
-	AccountsAdded        int `json:"accounts_added"`
-	AccountTasksDone     int `json:"account_tasks_done"`
-	AccountTasksAwaiting int `json:"account_tasks_awaiting"`
-
-	PhotosDownloaded int `json:"photo_downloaded"`
-
-	PhotoTasksDone     int `json:"photo_tasks_done"`
-	PhotoTasksAwaiting int `json:"photo_tasks_awaiting"`
-
-	aamux  sync.Mutex `json:"-"`
-	tdmux  sync.Mutex `json:"-"`
-	tamux  sync.Mutex `json:"-"`
-	pdmux  sync.Mutex `json:"-"`
-	ptamux sync.Mutex `json:"-"`
-	ptdmux sync.Mutex `json:"-"`
-}
-
-func (s *SessionStatistics) IncrementAccountsAdded() {
-	s.aamux.Lock()
-	s.AccountsAdded++
-	s.aamux.Unlock()
-}
-
-func (s *SessionStatistics) IncrementAccountTasksDone() {
-	s.tdmux.Lock()
-	s.AccountTasksDone++
-	s.tdmux.Unlock()
-}
-
-func (s *SessionStatistics) IncrementPhotosDownloaded() {
-	s.pdmux.Lock()
-	s.PhotosDownloaded++
-	s.pdmux.Unlock()
-}
-
-func (s *SessionStatistics) IncrementAccountTasksAwaiting() {
-	s.tamux.Lock()
-	s.AccountTasksAwaiting++
-	s.tamux.Unlock()
-}
-
-func (s *SessionStatistics) DecrementAccountTasksAwaiting() {
-	s.tamux.Lock()
-	s.AccountTasksAwaiting--
-	s.tamux.Unlock()
-}
-
-func (s *SessionStatistics) IncrementPhotoTasksAwaiting() {
-	s.ptamux.Lock()
-	s.PhotoTasksAwaiting++
-	s.ptamux.Unlock()
-}
-
-func (s *SessionStatistics) DecrementPhotoTasksAwaiting() {
-	s.ptamux.Lock()
-	s.PhotoTasksAwaiting--
-	s.ptamux.Unlock()
-}
-
-func (s *SessionStatistics) IncrementPhotoTasksDone() {
-	s.ptdmux.Lock()
-	s.PhotoTasksDone++
-	s.ptdmux.Unlock()
-}
-
-func (s *SessionStatistics) String() string {
-	b, _ := json.Marshal(s)
-	return string(b)
-}
-
-var session = SessionStatistics{
-	0,
-	0,
-	0,
-	0,
-	0,
-	0,
-	sync.Mutex{},
-	sync.Mutex{},
-	sync.Mutex{},
-	sync.Mutex{},
-	sync.Mutex{},
-	sync.Mutex{},
-}
+var session = sessionPkg.NewSession()
