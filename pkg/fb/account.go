@@ -13,9 +13,9 @@ const (
 type Status string
 
 const (
-	Unprocessed = "unprocessed"
-	Processing  = "processing"
-	Processed   = "processed"
+	Unprocessed Status = "unprocessed"
+	Processing  Status = "processing"
+	Processed   Status = "processed"
 )
 
 type Account struct {
@@ -32,14 +32,6 @@ type Account struct {
 	FriendsParsed bool                 `json:"friends_parsed" bson:"friends_parsed"`
 	Status        Status               `json:"status" bson:"status"`
 	CreatedAt     int64                `json:"created_at" bson:"created_at"`
-}
-
-type Place struct {
-	ID        primitive.ObjectID `json:"id" bson:"_id"`
-	Name      string             `json:"name" bson:"name"`
-	Location  [2]float64         `json:"location" bson:"location"`
-	Country   string             `json:"country" bson:"country"`
-	CreatedAt int64              `json:"created_at" bson:"created_at"`
 }
 
 type MalformedAccountError struct {

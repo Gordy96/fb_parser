@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gordy96/fb_parser/pkg/fb"
+	"github.com/gordy96/fb_parser/pkg/fb/photo"
+	"github.com/gordy96/fb_parser/pkg/fb/place"
 	"github.com/gordy96/fb_parser/pkg/fb/util"
 	"github.com/gordy96/fb_parser/pkg/fb/worker"
 	errors2 "github.com/gordy96/fb_parser/pkg/fb/worker/errors"
@@ -13,7 +15,6 @@ import (
 	"github.com/gordy96/fb_parser/pkg/geo/google"
 	"github.com/gordy96/fb_parser/pkg/queue"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/x/network/connstring"
@@ -29,232 +30,6 @@ import (
 
 type Suspender interface {
 	Suspend()
-}
-
-type AccountService struct {
-	col *mongo.Collection
-	mux sync.Mutex
-}
-
-func (a *AccountService) Find(id string) *fb.Account {
-	r := a.col.FindOne(nil, bson.M{
-		"id": id,
-	})
-	b := &fb.Account{}
-
-	e := r.Decode(b)
-
-	if e != nil {
-		return nil
-	}
-	return b
-}
-
-func (a *AccountService) Save(account *fb.Account) (bool, error) {
-	o := &options.UpdateOptions{}
-	o.SetUpsert(true)
-	a.mux.Lock()
-	if account.CreatedAt == 0 {
-		account.CreatedAt = time.Now().Unix()
-	}
-	if account.Status == "" {
-		account.Status = fb.Unprocessed
-	}
-	r, err := a.col.UpdateOne(nil, bson.M{"id": account.ID}, bson.M{"$set": account}, o)
-	a.mux.Unlock()
-	return (r.ModifiedCount + r.UpsertedCount) >= 1, err
-}
-
-func (a *AccountService) Delete(account *fb.Account) (bool, error) {
-	r, err := a.col.DeleteOne(nil, bson.M{"id": account.ID})
-	return (r.DeletedCount) >= 1, err
-}
-
-func (a *AccountService) FindNextToProcess() (*fb.Account, error) {
-	r := a.col.FindOneAndUpdate(nil, bson.M{
-		"status": fb.Unprocessed,
-	}, bson.M{
-		"$set": bson.M{
-			"status": fb.Processing,
-		},
-	})
-	b := &fb.Account{}
-
-	e := r.Decode(b)
-
-	if e != nil {
-		return nil, e
-	}
-	return b, nil
-}
-
-type WorkerAccountService struct {
-	col *mongo.Collection
-	mux sync.Mutex
-}
-
-func (w *WorkerAccountService) find(criteria bson.M) (*worker.FBAccount, error) {
-	r := w.col.FindOneAndUpdate(nil, criteria, bson.M{"$set": bson.M{"status": worker.Busy}})
-	b := &worker.FBAccount{}
-
-	e := r.Decode(b)
-	b.Init()
-
-	if e != nil {
-		return nil, e
-	}
-	return b, nil
-}
-
-func (w *WorkerAccountService) FindNextRandom() (*worker.FBAccount, error) {
-	a, err := w.find(bson.M{
-		"status": worker.Available,
-	})
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			_, err := w.find(bson.M{
-				"$or": bson.A{
-					bson.M{"status": worker.Busy},
-					bson.M{"status": worker.Available},
-				},
-			})
-			if err != nil && err == mongo.ErrNoDocuments {
-				return nil, err
-			}
-			return nil, nil
-		} else {
-			return nil, err
-		}
-	}
-
-	return a, nil
-}
-
-func (w *WorkerAccountService) Release(account *worker.FBAccount) (bool, error) {
-	account.Status = worker.Available
-	return w.Save(account)
-}
-
-func (w *WorkerAccountService) Disable(account *worker.FBAccount) (bool, error) {
-	account.Status = worker.Error
-	return w.Save(account)
-}
-
-func (w *WorkerAccountService) FindByEmail(email string) (*worker.FBAccount, error) {
-	return w.find(bson.M{
-		"email": email,
-	})
-}
-
-func (w *WorkerAccountService) FindByID(id primitive.ObjectID) (*worker.FBAccount, error) {
-	return w.find(bson.M{
-		"_id": id,
-	})
-}
-
-func (w *WorkerAccountService) Save(account *worker.FBAccount) (bool, error) {
-	o := options.Update()
-	o.SetUpsert(true)
-	w.mux.Lock()
-	if account.CreatedAt == 0 {
-		account.CreatedAt = time.Now().Unix()
-	}
-	r, err := w.col.UpdateOne(nil, bson.M{"email": account.Email}, bson.M{"$set": account}, o)
-	w.mux.Unlock()
-	return (r.ModifiedCount + r.UpsertedCount) >= 1, err
-}
-
-type PlaceService struct {
-	col  *mongo.Collection
-	smux sync.Mutex
-	fmux sync.Mutex
-}
-
-func (p *PlaceService) FindByName(name string) (*fb.Place, error) {
-	r := p.col.FindOne(nil, bson.M{"name": name})
-
-	if r.Err() != nil {
-		return nil, r.Err()
-	}
-
-	place := &fb.Place{}
-
-	err := r.Decode(place)
-
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return place, nil
-}
-
-func (p *PlaceService) FindByNameOrCreate(name string, cbl ...func(*fb.Place)) (*fb.Place, error) {
-	p.fmux.Lock()
-	defer p.fmux.Unlock()
-	pl, err := p.FindByName(name)
-	if err != nil {
-		return nil, err
-	}
-	if pl != nil {
-		return pl, nil
-	}
-	pl = &fb.Place{Name: name}
-	ok, err := p.Save(pl)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, errors.New("could not save place")
-	}
-	if len(cbl) > 0 {
-		for _, cb := range cbl {
-			cb(pl)
-		}
-	}
-	return pl, nil
-}
-
-func (p *PlaceService) FindByID(id primitive.ObjectID) (*fb.Place, error) {
-	r := p.col.FindOne(nil, bson.M{"_id": id})
-
-	if r.Err() != nil {
-		return nil, r.Err()
-	}
-
-	place := &fb.Place{}
-
-	err := r.Decode(place)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return place, nil
-}
-
-func (p *PlaceService) Save(place *fb.Place) (bool, error) {
-	o := options.Update()
-	o.SetUpsert(true)
-
-	var err error
-	var insCount int
-	p.smux.Lock()
-	if place.ID.IsZero() {
-		place.ID = primitive.NewObjectID()
-	}
-	var r *mongo.UpdateResult
-	r, err = p.col.UpdateOne(nil, bson.M{"_id": place.ID}, bson.M{"$set": place}, o)
-	p.smux.Unlock()
-	insCount = int(r.ModifiedCount + r.UpsertedCount)
-
-	if err != nil {
-		return false, err
-	}
-
-	return insCount >= 1, nil
 }
 
 type CountryService struct {
@@ -289,88 +64,6 @@ func (c CountryService) GetCountryNameFromPoint(p geo.Point) (string, error) {
 		}
 	}
 	return "", geo.InTheMiddleOfNoWhereError{Point: p}
-}
-
-type PhotoStatus string
-
-const (
-	Unprocessed PhotoStatus = "unprocessed"
-	Processing  PhotoStatus = "processing"
-	Processed   PhotoStatus = "processed"
-	Error		PhotoStatus	= "error"
-)
-
-type Photo struct {
-	ID        string      `json:"id" bson:"id"`
-	UserID    string      `json:"user_id" bson:"user_id"`
-	AlbumID   string      `json:"album_id" bson:"album_id"`
-	FullLink  string      `json:"full_link,omitempty" bson:"full_link,omitempty"`
-	CreatedAt int64       `json:"created_at" bson:"created_at"`
-	Status    PhotoStatus `json:"status" bson:"status"`
-}
-
-type PhotoService struct {
-	col *mongo.Collection
-	mux sync.Mutex
-}
-
-func (p *PhotoService) find(criteria interface{}) (*Photo, error) {
-	r := p.col.FindOne(nil, criteria)
-	photo := &Photo{}
-	err := r.Decode(photo)
-	if err != nil {
-		return nil, err
-	}
-	return photo, nil
-}
-
-func (p *PhotoService) FindByID(id string) (*Photo, error) {
-	p.mux.Lock()
-	defer p.mux.Unlock()
-	return p.find(bson.M{"id": id})
-}
-
-func (p *PhotoService) FindNextToDownload() (*Photo, error) {
-	p.mux.Lock()
-	defer p.mux.Unlock()
-	o := options.FindOneAndUpdate()
-	o.SetSort(bson.M{
-		"_id": -1,
-	})
-	r := p.col.FindOneAndUpdate(nil, bson.M{
-		"full_link": bson.M{
-			"$exists": false,
-		},
-		"status": Unprocessed,
-	}, bson.M{
-		"$set": bson.M{
-			"status": Processing,
-		},
-	}, o)
-	photo := &Photo{}
-	err := r.Decode(photo)
-	if err != nil {
-		return nil, err
-	}
-	return photo, nil
-}
-
-func (p *PhotoService) Save(photo *Photo) (bool, error) {
-	p.mux.Lock()
-	defer p.mux.Unlock()
-	o := options.Update()
-	o.SetUpsert(true)
-	if photo.CreatedAt == 0 {
-		photo.CreatedAt = time.Now().Unix()
-	}
-	if photo.Status == "" {
-		photo.Status = Unprocessed
-	}
-	re, err := p.col.UpdateOne(nil, bson.M{"id": photo.ID}, bson.M{"$set": photo}, o)
-	if err != nil {
-		return false, err
-	}
-	return (re.ModifiedCount + re.UpsertedCount) > 0, nil
 }
 
 func SaveFullPhoto(userId string, albumId string, photoId string, link string) {
@@ -411,7 +104,7 @@ func sleepMillis(dur int) {
 	}
 }
 
-func recursiveSearch(as *AccountService, account *fb.Account, ws *WorkerAccountService, worker *worker.FBAccount, depth int, maxPhotos int, minPhotos int) error {
+func recursiveSearch(as *fb.AccountService, account *fb.Account, ws *worker.AccountService, worker *worker.FBAccount, depth int, maxPhotos int, minPhotos int) error {
 	if account.ID == "" {
 		if account.Nickname == "" {
 			return errors.New("malformed account")
@@ -470,7 +163,7 @@ func recursiveSearch(as *AccountService, account *fb.Account, ws *WorkerAccountS
 					for _, id := range photos {
 						foundPhotos++
 						if !CheckSavedPhoto(account.ID, album, id) {
-							enqueuePhotoFull(ws, photoService, Photo{ID: id, AlbumID: album, UserID: account.ID})
+							enqueuePhotoFull(ws, photoService, photo.Photo{ID: id, AlbumID: album, UserID: account.ID})
 						}
 					}
 				}
@@ -575,8 +268,8 @@ func logAnything(v interface{}) {
 }
 
 type RecursCommand struct {
-	WorkerService  *WorkerAccountService
-	AccountService *AccountService
+	WorkerService  *worker.AccountService
+	AccountService *fb.AccountService
 	Depth          int
 	MaxPhotos      int
 	MinPhotos      int
@@ -651,8 +344,8 @@ func (r RecursCommand) Handle() error {
 }
 
 type PhotoFullCommand struct {
-	WorkerService *WorkerAccountService
-	PhotoService  *PhotoService
+	WorkerService *worker.AccountService
+	PhotoService  *photo.Service
 }
 
 func (p PhotoFullCommand) Handle() error {
@@ -661,9 +354,9 @@ func (p PhotoFullCommand) Handle() error {
 		session.IncrementPhotoTasksDone()
 	}()
 
-	photo, _ := p.PhotoService.FindNextToDownload()
+	ph, _ := p.PhotoService.FindNextToDownload()
 
-	if photo == nil {
+	if ph == nil {
 		logAnything("no photos to download")
 		return nil
 	}
@@ -674,15 +367,15 @@ func (p PhotoFullCommand) Handle() error {
 		if err != nil {
 			logError(err)
 			logAnything("worker stops see error log")
-			photo.Status = Unprocessed
-			p.PhotoService.Save(photo)
+			ph.Status = photo.Unprocessed
+			p.PhotoService.Save(ph)
 			return nil
 		}
 
 		if w != nil {
 			//logAnything(fmt.Sprintf("got worker %s", w.Email))
 			w.Init()
-			fullLink, err := w.GetPhotoFull(photo.ID)
+			fullLink, err := w.GetPhotoFull(ph.ID)
 			if err != nil {
 				logError(err)
 				logAnything(fmt.Sprintf("worker %s got critical exception. See logs", w.Email))
@@ -699,42 +392,42 @@ func (p PhotoFullCommand) Handle() error {
 				}
 				//logAnything(fmt.Sprintf("releasing worker %s", w.Email))
 				p.WorkerService.Release(w)
-				photo.Status = Error
-				p.PhotoService.Save(photo)
+				ph.Status = photo.Error
+				p.PhotoService.Save(ph)
 				return nil
 			}
 			//logAnything(fmt.Sprintf("releasing worker %s", w.Email))
 			p.WorkerService.Release(w)
 			if fullLink != "" {
-				photo.FullLink = fullLink
-				photo.Status = Processed
-				p.PhotoService.Save(photo)
+				ph.FullLink = fullLink
+				ph.Status = photo.Processed
+				p.PhotoService.Save(ph)
 				session.IncrementPhotosDownloaded()
 				//Removed parallelism so no "too many files" exception raised
-				go SaveFullPhoto(photo.UserID, photo.AlbumID, photo.ID, fullLink)
+				go SaveFullPhoto(ph.UserID, ph.AlbumID, ph.ID, fullLink)
 			} else {
-				photo.Status = Unprocessed
-				p.PhotoService.Save(photo)
+				ph.Status = photo.Unprocessed
+				p.PhotoService.Save(ph)
 			}
 			return nil
 		}
 		sleepMillis(20)
 	}
-	photo.Status = Unprocessed
-	p.PhotoService.Save(photo)
-	logError(errors.New(fmt.Sprintf("couldn't acquire worker account saving %s/%s/%s", photo.UserID, photo.AlbumID, photo.ID)))
+	ph.Status = photo.Unprocessed
+	p.PhotoService.Save(ph)
+	logError(errors.New(fmt.Sprintf("couldn't acquire worker account saving %s/%s/%s", ph.UserID, ph.AlbumID, ph.ID)))
 	return nil
 }
 
 var taskQueue *queue.Queue
 var photoQueue *queue.Queue
 
-func enqueuePhotoFull(ws *WorkerAccountService, ps *PhotoService, p Photo) {
+func enqueuePhotoFull(ws *worker.AccountService, ps *photo.Service, p photo.Photo) {
 	ps.Save(&p)
 	enqueueFullNoPhoto(ws, ps)
 }
 
-func enqueueFullNoPhoto(ws *WorkerAccountService, ps *PhotoService) {
+func enqueueFullNoPhoto(ws *worker.AccountService, ps *photo.Service) {
 	session.IncrementPhotoTasksAwaiting()
 	photoQueue.Enqueue(&PhotoFullCommand{
 		WorkerService: ws,
@@ -742,12 +435,12 @@ func enqueueFullNoPhoto(ws *WorkerAccountService, ps *PhotoService) {
 	})
 }
 
-func enqueueCrawl(as *AccountService, account fb.Account, ws *WorkerAccountService, depth int, maxPhotos int, minPhotos int) {
+func enqueueCrawl(as *fb.AccountService, account fb.Account, ws *worker.AccountService, depth int, maxPhotos int, minPhotos int) {
 	as.Save(&account)
 	enqueueCrawlNoAccount(as, ws, depth, maxPhotos, minPhotos)
 }
 
-func enqueueCrawlNoAccount(as *AccountService, ws *WorkerAccountService, depth int, maxPhotos int, minPhotos int) {
+func enqueueCrawlNoAccount(as *fb.AccountService, ws *worker.AccountService, depth int, maxPhotos int, minPhotos int) {
 	session.IncrementAccountTasksAwaiting()
 	taskQueue.Enqueue(&RecursCommand{
 		WorkerService:  ws,
@@ -758,36 +451,36 @@ func enqueueCrawlNoAccount(as *AccountService, ws *WorkerAccountService, depth i
 	})
 }
 
-var ps *PlaceService
+var ps *place.Service
 var cs *CountryService
-var photoService *PhotoService
+var photoService *photo.Service
 
-func stdResolve(s string) *fb.Place {
+func stdResolve(s string) *place.Place {
 	decoded := s
 	for strings.Contains(decoded, "\\") {
 		json.Unmarshal([]byte("\""+decoded+"\""), &decoded)
 	}
-	place, err := ps.FindByNameOrCreate(decoded, func(place *fb.Place) {
+	pl, err := ps.FindByNameOrCreate(decoded, func(p *place.Place) {
 		//TODO: "go" this shit for the sake of performance
-		go func(place *fb.Place) {
+		go func(p *place.Place) {
 			gm := google.MapsHttp{}
-			coords, err := gm.FindByName(place.Name)
+			coords, err := gm.FindByName(p.Name)
 			if err != nil {
 				logError(err)
 			}
-			place.Location[0] = coords.X
-			place.Location[1] = coords.Y
-			place.Country, err = cs.GetCountryNameFromPoint(coords)
+			p.Location[0] = coords.X
+			p.Location[1] = coords.Y
+			p.Country, err = cs.GetCountryNameFromPoint(coords)
 			if err != nil {
 				logError(err)
 			}
-			ps.Save(place)
-		}(place)
+			ps.Save(p)
+		}(p)
 	})
 	if err != nil {
 		logError(err)
 	}
-	return place
+	return pl
 }
 
 func main() {
@@ -874,12 +567,12 @@ func main() {
 		}()
 	}
 
-	ps = &PlaceService{db.Collection("Places"), sync.Mutex{}, sync.Mutex{}}
+	ps = place.NewService(db.Collection("Places"))
 	cs = &CountryService{db.Collection("Countries")}
-	ws := WorkerAccountService{db.Collection("Workers"), sync.Mutex{}}
-	as := AccountService{db.Collection("Accounts"), sync.Mutex{}}
+	ws := worker.NewAccountService(db.Collection("Workers"))
+	as := fb.NewAccountService(db.Collection("Accounts"))
 
-	photoService = &PhotoService{db.Collection("Photos"), sync.Mutex{}}
+	photoService = photo.NewService(db.Collection("Photos"))
 
 	worker.ResolvePlace = stdResolve
 
@@ -897,14 +590,14 @@ func main() {
 					} else {
 						acc = fb.Account{Nickname: arg}
 					}
-					enqueueCrawl(&as, acc, &ws, *crawlDepth, *maxPhotos, *minPhotos)
+					enqueueCrawl(as, acc, ws, *crawlDepth, *maxPhotos, *minPhotos)
 				}
 			} else {
 				for i := 0; i < *accountWorkersCount; i++ {
-					enqueueCrawlNoAccount(&as, &ws, *crawlDepth, *maxPhotos, *minPhotos)
+					enqueueCrawlNoAccount(as, ws, *crawlDepth, *maxPhotos, *minPhotos)
 				}
 				for i := 0; i < *photoWorkersCount; i++ {
-					enqueueFullNoPhoto(&ws, photoService)
+					enqueueFullNoPhoto(ws, photoService)
 				}
 			}
 		}
@@ -934,10 +627,10 @@ func main() {
 	if photoQueue != nil && taskQueue != nil {
 		go func() {
 			if session.PhotoTasksAwaiting == 0 {
-				enqueueFullNoPhoto(&ws, photoService)
+				enqueueFullNoPhoto(ws, photoService)
 			}
 			if session.AccountTasksAwaiting == 0 {
-				enqueueCrawlNoAccount(&as, &ws, *crawlDepth, *minPhotos, *maxPhotos)
+				enqueueCrawlNoAccount(as, ws, *crawlDepth, *minPhotos, *maxPhotos)
 			}
 			sleepMillis(5 * 1000 * 60)
 		}()

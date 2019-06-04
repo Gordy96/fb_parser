@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gordy96/fb_parser/pkg/fb"
+	"github.com/gordy96/fb_parser/pkg/fb/place"
 	"github.com/gordy96/fb_parser/pkg/fb/util"
 	"github.com/gordy96/fb_parser/pkg/fb/worker/errors"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -24,13 +25,13 @@ var (
 	loginFields = []string{"had_cp_prefilled", "had_password_prefilled", "m_sess", "jazoest", "__req", "__ajax__", "li", "unrecognized_tries", "email", "prefill_type", "fb_dtsg", "m_ts", "try_number", "prefill_source", "first_prefill_source", "lsd", "__user", "__dyn", "pass", "prefill_contact_point", "first_prefill_type", "is_smart_lock"}
 )
 
-type AccountStatus string
+type Status string
 
 const (
-	Available AccountStatus = "available"
-	Busy      AccountStatus = "busy"
-	Error     AccountStatus = "error"
-	Resting   AccountStatus = "resting"
+	Available Status = "available"
+	Busy      Status = "busy"
+	Error     Status = "error"
+	Resting   Status = "resting"
 )
 
 type FBAccount struct {
@@ -38,7 +39,7 @@ type FBAccount struct {
 	Password       string        `json:"password" bson:"password"`
 	Proxy          string        `json:"proxy" bson:"proxy"`
 	Env            Env           `json:"-" bson:"env"`
-	Status         AccountStatus `json:"status" bson:"status"`
+	Status         Status `json:"status" bson:"status"`
 	RequestTimeout int           `json:"request_timeout" bson:"request_timeout"`
 	ReleaseTimeout int           `json:"release_timeout" bson:"release_timeout"`
 	CreatedAt      int64         `json:"created_at" bson:"created_at"`
@@ -1040,4 +1041,4 @@ func parseNickName(source []byte) string {
 	return ""
 }
 
-var ResolvePlace func(string) *fb.Place
+var ResolvePlace func(string) *place.Place
