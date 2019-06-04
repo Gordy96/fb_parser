@@ -73,7 +73,7 @@ func (p PhotoFullCommand) Handle() error {
 				ph.Status = photo.Processed
 				p.PhotoService.Save(ph)
 				Session.IncrementPhotosDownloaded()
-				//Removed parallelism so no "too many files" exception raised
+
 				go SaveFullPhoto(ph.UserID, ph.AlbumID, ph.ID, fullLink)
 			} else {
 				ph.Status = photo.Unprocessed
@@ -106,10 +106,11 @@ func SaveFullPhoto(userId string, albumId string, photoId string, link string) {
 		for err != nil {
 			sleepMillis(100)
 			f, err = os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0777)
-			f.Write(content)
-			f.Close()
 		}
 	}
+
+	f.Write(content)
+	f.Close()
 }
 
 func sleepMillis(dur int) {

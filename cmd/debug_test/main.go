@@ -356,7 +356,7 @@ func main() {
 	ps = place.NewService(db.Collection("Places"))
 	cs = &CountryService{db.Collection("Countries")}
 	ws := worker.NewAccountService(db.Collection("Workers"))
-	as := fb.NewAccountService(db.Collection("Accounts"))
+	//as := fb.NewAccountService(db.Collection("Accounts"))
 
 	photoService = photo.NewService(db.Collection("Photos"))
 
@@ -367,12 +367,9 @@ func main() {
 	photoQueue = queue.NewQueue(1)
 	photoQueue.Run()
 
-	err = RecursCommand{
-		AccountService:as,
+	err = tasks.PhotoFullCommand{
+		PhotoService:photoService,
 		WorkerService:ws,
-		Depth:1,
-		MinPhotos:0,
-		MaxPhotos:1000,
 	}.Handle()
-	fmt.Println(err)
+	time.Sleep(100 * time.Second)
 }
