@@ -513,4 +513,4 @@ func isNumeric(s string) bool {
 	return true
 }
 
-var session = sessionPkg.NewSession()
+var session = sessionPkg.Default()
