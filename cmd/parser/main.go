@@ -292,6 +292,7 @@ func enqueueFullNoPhoto(ws *worker.AccountService, ps *photo.Service) {
 	photoQueue.Enqueue(&tasks.PhotoFullCommand{
 		WorkerService: ws,
 		PhotoService:  ps,
+		Queue: photoQueue,
 	})
 }
 

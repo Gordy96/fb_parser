@@ -8,6 +8,7 @@ import (
 	"github.com/gordy96/fb_parser/pkg/fb/worker"
 	"github.com/gordy96/fb_parser/pkg/fb/worker/errors"
 	"github.com/gordy96/fb_parser/pkg/logging"
+	"github.com/gordy96/fb_parser/pkg/queue"
 	"net/http"
 	"os"
 	"time"
@@ -16,6 +17,7 @@ import (
 type PhotoFullCommand struct {
 	WorkerService 	*worker.AccountService
 	PhotoService  	*photo.Service
+	Queue			*queue.Queue
 }
 
 func (p PhotoFullCommand) Handle() error {
@@ -79,6 +81,11 @@ func (p PhotoFullCommand) Handle() error {
 				ph.Status = photo.Unprocessed
 				p.PhotoService.Save(ph)
 			}
+			p.Queue.Enqueue(PhotoFullCommand{
+				WorkerService: p.WorkerService,
+				PhotoService:  p.PhotoService,
+				Queue: p.Queue,
+			})
 			return nil
 		}
 		sleepMillis(20)
