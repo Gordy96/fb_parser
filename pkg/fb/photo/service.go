@@ -44,9 +44,6 @@ func (p *Service) FindNextToDownload() (*Photo, error) {
 		"_id": -1,
 	})
 	r := p.col.FindOneAndUpdate(nil, bson.M{
-		"full_link": bson.M{
-			"$exists": false,
-		},
 		"status": Unprocessed,
 	}, bson.M{
 		"$set": bson.M{

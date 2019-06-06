@@ -34,6 +34,13 @@ func (p PhotoFullCommand) Handle() error {
 	}
 
 	start := time.Now()
+	if ph.FullLink != "" {
+		ph.Status = photo.Processed
+		p.PhotoService.Save(ph)
+		Session.IncrementPhotosDownloaded()
+
+		go SaveFullPhoto(ph.UserID, ph.AlbumID, ph.ID, ph.FullLink)
+	}
 	for time.Now().Sub(start) < 15*time.Minute {
 		w, err := p.WorkerService.FindNextRandom()
 		if err != nil {
