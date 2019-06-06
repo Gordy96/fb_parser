@@ -43,6 +43,7 @@ type FBAccount struct {
 	RequestTimeout int           `json:"request_timeout" bson:"request_timeout"`
 	ReleaseTimeout int           `json:"release_timeout" bson:"release_timeout"`
 	CreatedAt      int64         `json:"created_at" bson:"created_at"`
+	BannedAt	   int64         `json:"banned_at" bson:"banned_at"`
 	cl             http.Client   `json:"-" bson:"-"`
 }
 

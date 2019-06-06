@@ -66,6 +66,7 @@ func (w *AccountService) Release(account *FBAccount) (bool, error) {
 
 func (w *AccountService) Disable(account *FBAccount) (bool, error) {
 	account.Status = Error
+	account.BannedAt = time.Now().Unix()
 	return w.Save(account)
 }
 
