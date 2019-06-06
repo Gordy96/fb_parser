@@ -35,11 +35,9 @@ func (p PhotoFullCommand) Handle() error {
 
 	start := time.Now()
 	if ph.FullLink != "" {
-		ph.Status = photo.Processed
-		p.PhotoService.Save(ph)
-		Session.IncrementPhotosDownloaded()
-
-		go SaveFullPhoto(ph.UserID, ph.AlbumID, ph.ID, ph.FullLink)
+		p.download(ph)
+		p.requeue()
+		return nil
 	}
 	for time.Now().Sub(start) < 15*time.Minute {
 		w, err := p.WorkerService.FindNextRandom()
@@ -79,20 +77,12 @@ func (p PhotoFullCommand) Handle() error {
 			p.WorkerService.Release(w)
 			if fullLink != "" {
 				ph.FullLink = fullLink
-				ph.Status = photo.Processed
-				p.PhotoService.Save(ph)
-				Session.IncrementPhotosDownloaded()
-
-				go SaveFullPhoto(ph.UserID, ph.AlbumID, ph.ID, fullLink)
+				p.download(ph)
 			} else {
 				ph.Status = photo.Unprocessed
 				p.PhotoService.Save(ph)
 			}
-			p.Queue.Enqueue(PhotoFullCommand{
-				WorkerService: p.WorkerService,
-				PhotoService:  p.PhotoService,
-				Queue: p.Queue,
-			})
+			p.requeue()
 			return nil
 		}
 		sleepMillis(20)
@@ -101,6 +91,22 @@ func (p PhotoFullCommand) Handle() error {
 	p.PhotoService.Save(ph)
 	logging.LogError(defErrors.New(fmt.Sprintf("couldn't acquire worker account saving %s/%s/%s", ph.UserID, ph.AlbumID, ph.ID)))
 	return nil
+}
+
+func (p *PhotoFullCommand) download(ph *photo.Photo) {
+	ph.Status = photo.Processed
+	p.PhotoService.Save(ph)
+	Session.IncrementPhotosDownloaded()
+
+	go SaveFullPhoto(ph.UserID, ph.AlbumID, ph.ID, ph.FullLink)
+}
+
+func (p *PhotoFullCommand) requeue() {
+	p.Queue.Enqueue(PhotoFullCommand{
+		WorkerService: p.WorkerService,
+		PhotoService:  p.PhotoService,
+		Queue: p.Queue,
+	})
 }
 
 func SaveFullPhoto(userId string, albumId string, photoId string, link string) {
