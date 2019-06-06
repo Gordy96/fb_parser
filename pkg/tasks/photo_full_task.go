@@ -29,7 +29,6 @@ func (p PhotoFullCommand) Handle() error {
 	ph, _ := p.PhotoService.FindNextToDownload()
 
 	if ph == nil {
-		logging.LogAnything("no photos to download")
 		return nil
 	}
 
